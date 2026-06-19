@@ -1,0 +1,27 @@
+# HR module -> Employee records.
+# HR specialists maintain records, employees can see their own, only HR managers
+# can terminate, admins can do anything.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "hr:employee_record"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view", "edit"]
+      effect: EFFECT_ALLOW
+      roles: ["hr_specialist", "hr_manager"]
+
+    # Employees can view their own record only.
+    - actions: ["view"]
+      effect: EFFECT_ALLOW
+      derivedRoles: ["owner"]
+
+    - actions: ["terminate"]
+      effect: EFFECT_ALLOW
+      roles: ["hr_manager"]
+
+    - actions: ["*"]
+      effect: EFFECT_ALLOW
+      roles: ["admin"]

@@ -1,0 +1,50 @@
+# Kamal 2.11.0 deployment for the access-management PDP (Cerbos + ERP policies).
+# Docs: https://kamal-deploy.org
+#
+# Replace every value marked with  <-- CHANGE  before your first deploy.
+# Run `bundle exec kamal config` to validate this file.
+---
+service: access-management
+
+# Image name in your container registry (namespace/name, no tag — Kamal adds it).
+image: your-org/access-management            # <-- CHANGE
+
+servers:
+  web:
+    hosts:
+      - 203.0.113.10                          # <-- CHANGE to your Docker host(s)
+    # To also expose the gRPC API (port 3593) directly (kamal-proxy fronts HTTP
+    # only), uncomment:
+    # options:
+    #   publish:
+    #     - "3593:3593"
+
+# kamal-proxy terminates TLS and forwards to Cerbos's HTTP port.
+proxy:
+  ssl: true
+  host: access.example.com                    # <-- CHANGE to your domain
+  app_port: 3592
+  healthcheck:
+    path: /_cerbos/health
+    interval: 3
+    timeout: 5
+
+registry:
+  server: ghcr.io                             # <-- CHANGE if not using GitHub CR
+  username: your-org                          # <-- CHANGE (GitHub user/org for ghcr.io)
+  password:
+    - KAMAL_REGISTRY_PASSWORD                 # resolved from .kamal/secrets
+
+builder:
+  arch: amd64
+  dockerfile: deploy/kamal/Dockerfile
+  context: .
+
+env:
+  clear:
+    CERBOS_NO_TELEMETRY: "1"
+    CERBOS_CONFIG: /conf.yaml
+
+# Give the PDP time to boot and pass its healthcheck before Kamal rolls back.
+deploy_timeout: 30
+drain_timeout: 30

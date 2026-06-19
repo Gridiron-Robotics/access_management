@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Finance invoice policy tests
+principals:
+  accountant_amy:
+    id: amy
+    roles: ["accountant", "employee"]
+    attr:
+      department: finance
+  manager_mary:
+    id: mary
+    roles: ["finance_manager", "employee"]
+    attr:
+      department: finance
+  admin_alex:
+    id: alex
+    roles: ["admin"]
+
+resources:
+  small_invoice:
+    id: inv-001
+    kind: "finance:invoice"
+    attr:
+      owner: amy
+      amount: 5000
+      department: finance
+  large_invoice:
+    id: inv-002
+    kind: "finance:invoice"
+    attr:
+      owner: bob
+      amount: 50000
+      department: finance
+
+tests:
+  - name: Accountant can view and create invoices
+    input:
+      principals: [accountant_amy]
+      resources: [small_invoice]
+      actions: [view, create]
+    expected:
+      - principal: accountant_amy
+        resource: small_invoice
+        actions:
+          view: EFFECT_ALLOW
+          create: EFFECT_ALLOW
+
+  - name: Accountant cannot approve invoices
+    input:
+      principals: [accountant_amy]
+      resources: [small_invoice]
+      actions: [approve]
+    expected:
+      - principal: accountant_amy
+        resource: small_invoice
+        actions:
+          approve: EFFECT_DENY
+
+  - name: Finance manager can approve small invoices but not large ones
+    input:
+      principals: [manager_mary]
+      resources: [small_invoice, large_invoice]
+      actions: [approve]
+    expected:
+      - principal: manager_mary
+        resource: small_invoice
+        actions:
+          approve: EFFECT_ALLOW
+      - principal: manager_mary
+        resource: large_invoice
+        actions:
+          approve: EFFECT_DENY
+
+  - name: Admin can do anything
+    input:
+      principals: [admin_alex]
+      resources: [large_invoice]
+      actions: [view, approve, delete]
+    expected:
+      - principal: admin_alex
+        resource: large_invoice
+        actions:
+          view: EFFECT_ALLOW
+          approve: EFFECT_ALLOW
+          delete: EFFECT_ALLOW

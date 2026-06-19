@@ -38,3 +38,6 @@ junit.*.xml
 test-times.json
 unit.cover
 
+# access-management hardening loop (generated review output)
+harden/review-findings.json
+

@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Manufacturing work order policy tests
+principals:
+  operator_olive:
+    id: olive
+    roles: ["operator", "employee"]
+    attr:
+      line: A
+  supervisor_sven:
+    id: sven
+    roles: ["supervisor", "employee"]
+    attr:
+      line: A
+
+resources:
+  wo_line_a:
+    id: wo-a
+    kind: "manufacturing:work_order"
+    attr:
+      line: A
+  wo_line_b:
+    id: wo-b
+    kind: "manufacturing:work_order"
+    attr:
+      line: B
+
+tests:
+  - name: Operator can run work orders on their own line but not cancel
+    input:
+      principals: [operator_olive]
+      resources: [wo_line_a]
+      actions: [view, start, complete, cancel]
+    expected:
+      - principal: operator_olive
+        resource: wo_line_a
+        actions:
+          view: EFFECT_ALLOW
+          start: EFFECT_ALLOW
+          complete: EFFECT_ALLOW
+          cancel: EFFECT_DENY
+
+  - name: Operator cannot start work orders on another line
+    input:
+      principals: [operator_olive]
+      resources: [wo_line_b]
+      actions: [view, start]
+    expected:
+      - principal: operator_olive
+        resource: wo_line_b
+        actions:
+          view: EFFECT_ALLOW
+          start: EFFECT_DENY
+
+  - name: Supervisor can start on any line and cancel
+    input:
+      principals: [supervisor_sven]
+      resources: [wo_line_b]
+      actions: [start, cancel]
+    expected:
+      - principal: supervisor_sven
+        resource: wo_line_b
+        actions:
+          start: EFFECT_ALLOW
+          cancel: EFFECT_ALLOW
