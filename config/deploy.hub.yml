@@ -1,0 +1,20 @@
+# Kamal destination overlay for CERBOS HUB mode.
+#
+# Deploy with:   bundle exec kamal deploy -d hub
+#
+# Everything inherits from config/deploy.yml; this only flips the PDP to pull its
+# policy bundle from Cerbos Hub instead of the baked-in disk files. Plain
+# `kamal deploy` stays on disk mode (conf.yaml).
+#
+# Prereqs: a Cerbos Hub workspace + credentials, and the CERBOS_HUB_* values
+# exported so .kamal/secrets can resolve them. conf.hub.yaml is already baked
+# into the image. Full steps: integration/CERBOS_HUB.md
+---
+env:
+  clear:
+    CERBOS_NO_TELEMETRY: "1"
+    CERBOS_CONFIG: /conf.hub.yaml
+  secret:
+    - CERBOS_HUB_CLIENT_ID
+    - CERBOS_HUB_CLIENT_SECRET
+    - CERBOS_HUB_WORKSPACE_SECRET

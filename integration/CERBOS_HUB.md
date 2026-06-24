@@ -48,10 +48,12 @@ You can **start on disk and switch to Hub later** with zero policy changes.
    `CERBOS_HUB_CLIENT_ID`, `CERBOS_HUB_CLIENT_SECRET`, `CERBOS_HUB_WORKSPACE_SECRET`.
 4. Put those values in your deploy environment (placeholders are in
    `.kamal/secrets`; never commit the real values).
-5. Switch the PDP to Hub mode by setting, in `config/deploy.yml`:
-   `env.clear.CERBOS_CONFIG: /conf.hub.yaml` and adding the three secrets under
-   `env.secret` (a commented block is already there).
-6. `bundle exec kamal deploy`. The PDP starts and pulls the bundle from Hub.
+5. Export the three secrets in your deploy environment (they're listed in
+   `.kamal/secrets`, empty until you set them).
+6. Deploy Hub mode with the ready-made destination overlay:
+   `bundle exec kamal deploy -d hub` (uses `config/deploy.hub.yml`, which sets
+   `CERBOS_CONFIG=/conf.hub.yaml` + the Hub secrets). Plain `kamal deploy` stays
+   on disk mode. The PDP starts and pulls the bundle from Hub.
 
 > The Dockerfile already bakes in **both** `conf.yaml` and `conf.hub.yaml`, so
 > switching modes is just the `CERBOS_CONFIG` env var — no image rebuild logic.

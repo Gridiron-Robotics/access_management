@@ -51,6 +51,34 @@ else
   errors << "missing Gemfile pinning kamal 2.11.0"
 end
 
+# Hub mode (optional): if the destination overlay exists, sanity-check it.
+hub_overlay = "config/deploy.hub.yml"
+if File.exist?(hub_overlay)
+  hub =
+    begin
+      YAML.safe_load(File.read(hub_overlay), aliases: true)
+    rescue StandardError => e
+      errors << "#{hub_overlay} is not valid YAML: #{e.message}"
+      nil
+    end
+  if hub
+    if hub.dig("env", "clear", "CERBOS_CONFIG") != "/conf.hub.yaml"
+      errors << "deploy.hub.yml must set env.clear.CERBOS_CONFIG=/conf.hub.yaml"
+    end
+    secrets = hub.dig("env", "secret") || []
+    %w[CERBOS_HUB_CLIENT_ID CERBOS_HUB_CLIENT_SECRET CERBOS_HUB_WORKSPACE_SECRET].each do |s|
+      errors << "deploy.hub.yml env.secret missing #{s}" unless secrets.include?(s)
+    end
+  end
+  hub_conf = "deploy/kamal/conf.hub.yaml"
+  if !File.exist?(hub_conf)
+    errors << "missing #{hub_conf} (referenced by Hub mode)"
+  else
+    hc = (YAML.safe_load(File.read(hub_conf)) rescue nil)
+    errors << "#{hub_conf} storage.driver must be 'hub'" if hc && hc.dig("storage", "driver") != "hub"
+  end
+end
+
 if errors.empty?
   puts "kamal config structurally OK (service=#{cfg['service']}, image=#{cfg['image']})"
   exit 0
