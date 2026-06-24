@@ -4,6 +4,10 @@ This folder is **your** authorization rules — who can do what in each ERP modu
 It is the part of this repo that you own and change. The Cerbos engine (the rest
 of the repo) reads these files and answers "can user X do action Y on resource Z?"
 
+> **Integrating with your ERP / HRMS / SSO?** See **[ROLES.md](ROLES.md)** — the
+> role catalog, the attribute contract (what comes from HRMS vs IdP vs the ERP),
+> and the exact request your backend sends.
+
 ## How access works (the 4 ideas)
 
 - **Principal** = a user, carrying **roles** (`accountant`, `warehouse_clerk`,
