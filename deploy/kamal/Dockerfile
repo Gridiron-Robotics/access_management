@@ -8,7 +8,9 @@
 FROM ghcr.io/cerbos/cerbos:0.54.0
 
 # Bake in the production config and the policy set (the source of truth).
+# Both configs ship in the image; CERBOS_CONFIG selects disk (default) or Hub mode.
 COPY deploy/kamal/conf.yaml /conf.yaml
+COPY deploy/kamal/conf.hub.yaml /conf.hub.yaml
 COPY policies /policies
 
 # Tell Cerbos which config to load, and turn off anonymous telemetry.

@@ -44,6 +44,14 @@ env:
   clear:
     CERBOS_NO_TELEMETRY: "1"
     CERBOS_CONFIG: /conf.yaml
+  # To use Cerbos Hub mode instead (see integration/CERBOS_HUB.md), set
+  # CERBOS_CONFIG to /conf.hub.yaml and add the Hub secrets:
+  #   clear:
+  #     CERBOS_CONFIG: /conf.hub.yaml
+  #   secret:
+  #     - CERBOS_HUB_CLIENT_ID
+  #     - CERBOS_HUB_CLIENT_SECRET
+  #     - CERBOS_HUB_WORKSPACE_SECRET
 
 # Give the PDP time to boot and pass its healthcheck before Kamal rolls back.
 deploy_timeout: 30
