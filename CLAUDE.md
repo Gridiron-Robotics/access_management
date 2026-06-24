@@ -18,6 +18,7 @@ code** — it is not ours to rewrite.
    - `policies/**` — ERP access rules + their `*_test.yaml` tests.
    - `deploy/kamal/**`, `config/deploy.yml`, `.kamal/**`, `Gemfile` — deployment.
    - `harden/**` — the review/test/gate loop.
+   - `integration/**` — HRMS/ERP integration contract (role catalog + assignment page spec).
 3. **Pin every version. Never use `latest`.** The Cerbos image tag in
    `deploy/kamal/Dockerfile` is pinned; Kamal is pinned to **2.11.0** in
    `Gemfile`; Go deps are pinned in `go.mod`/`go.sum`; npm wrappers pin exact

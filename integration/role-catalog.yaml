@@ -1,0 +1,95 @@
+# Machine-readable role catalog for the HRMS "set access for this employee" page.
+#
+# The page renders ONE TOGGLE per role below, grouped by module. When an admin
+# saves, store the selected role keys against the employee (see integration/README.md).
+#
+# Keep this in sync with policies/**: every role key here must exist in a policy,
+# and every assignable role in a policy should appear here. (See ROLES.md.)
+version: 1
+
+# Granted to all staff by default; enables ownership-based access (the `owner`
+# derived role). The HRMS can auto-assign this to every active employee.
+baseline_roles:
+  - key: employee
+    label: Employee (baseline)
+    description: Default for all staff; enables "can act on my own records".
+
+# Full access to everything. Show this clearly separated and grant sparingly.
+global_roles:
+  - key: admin
+    label: Administrator
+    description: Full access to every module. Grant to very few people.
+
+modules:
+  - key: finance
+    label: Finance / Accounting
+    roles:
+      - key: accountant
+        label: Accountant
+        description: View and create invoices.
+      - key: finance_manager
+        label: Finance Manager
+        description: Approve invoices under $10,000.
+
+  - key: inventory
+    label: Inventory / Warehouse
+    roles:
+      - key: warehouse_clerk
+        label: Warehouse Clerk
+        description: View items; create/adjust stock in their own location.
+      - key: warehouse_manager
+        label: Warehouse Manager
+        description: Also transfer and delete items anywhere.
+
+  - key: hr
+    label: HR / People
+    roles:
+      - key: hr_specialist
+        label: HR Specialist
+        description: View and edit employee records.
+      - key: hr_manager
+        label: HR Manager
+        description: Also terminate employee records.
+
+  - key: sales
+    label: Sales / CRM
+    roles:
+      - key: sales_rep
+        label: Sales Rep
+        description: View/create leads; update their own leads.
+      - key: sales_manager
+        label: Sales Manager
+        description: Also reassign and update any lead.
+
+  - key: purchasing
+    label: Purchasing / Procurement
+    roles:
+      - key: buyer
+        label: Buyer
+        description: View/create POs; submit their own for approval.
+      - key: purchasing_manager
+        label: Purchasing Manager
+        description: Approve purchase orders up to $25,000.
+
+  - key: manufacturing
+    label: Manufacturing / Production
+    roles:
+      - key: operator
+        label: Operator
+        description: View work orders; start/complete on their own line.
+      - key: supervisor
+        label: Supervisor
+        description: Also start/complete on any line and cancel.
+
+# Attributes the HRMS/ERP must supply per user (NOT toggled on the page; read at
+# request time). These drive the conditional rules (e.g. same-location adjust).
+attributes:
+  - key: department
+    label: Department
+    source: HRMS
+  - key: location
+    label: Warehouse location
+    source: ERP/Ops
+  - key: line
+    label: Production line
+    source: ERP/Ops
