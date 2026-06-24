@@ -1,0 +1,29 @@
+# Inventory module -> Stock items.
+# Clerks work items in their own warehouse location; managers move/delete anything.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "inventory:item"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view"]
+      effect: EFFECT_ALLOW
+      roles: ["warehouse_clerk", "warehouse_manager"]
+
+    # Clerks/managers can create or adjust stock only in their own location.
+    - actions: ["create", "adjust"]
+      effect: EFFECT_ALLOW
+      roles: ["warehouse_clerk", "warehouse_manager"]
+      condition:
+        match:
+          expr: request.resource.attr.location == request.principal.attr.location
+
+    - actions: ["transfer", "delete"]
+      effect: EFFECT_ALLOW
+      roles: ["warehouse_manager"]
+
+    - actions: ["*"]
+      effect: EFFECT_ALLOW
+      roles: ["admin"]

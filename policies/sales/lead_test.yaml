@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Sales lead policy tests
+principals:
+  rep_rita:
+    id: rita
+    roles: ["sales_rep", "employee"]
+    attr:
+      department: sales
+  manager_mona:
+    id: mona
+    roles: ["sales_manager", "employee"]
+    attr:
+      department: sales
+
+resources:
+  rita_lead:
+    id: lead-rita
+    kind: "sales:lead"
+    attr:
+      owner: rita
+  other_lead:
+    id: lead-other
+    kind: "sales:lead"
+    attr:
+      owner: roger
+
+tests:
+  - name: Rep can update their own lead but not reassign
+    input:
+      principals: [rep_rita]
+      resources: [rita_lead]
+      actions: [view, create, update, reassign]
+    expected:
+      - principal: rep_rita
+        resource: rita_lead
+        actions:
+          view: EFFECT_ALLOW
+          create: EFFECT_ALLOW
+          update: EFFECT_ALLOW
+          reassign: EFFECT_DENY
+
+  - name: Rep cannot update someone else's lead
+    input:
+      principals: [rep_rita]
+      resources: [other_lead]
+      actions: [view, update]
+    expected:
+      - principal: rep_rita
+        resource: other_lead
+        actions:
+          view: EFFECT_ALLOW
+          update: EFFECT_DENY
+
+  - name: Manager can reassign and update any lead
+    input:
+      principals: [manager_mona]
+      resources: [other_lead]
+      actions: [update, reassign]
+    expected:
+      - principal: manager_mona
+        resource: other_lead
+        actions:
+          update: EFFECT_ALLOW
+          reassign: EFFECT_ALLOW

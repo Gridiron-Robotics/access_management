@@ -1,0 +1,59 @@
+{% extends 'index.html' %}
+{% load i18n %}
+{% block content %}
+<div class="oh-wrapper">
+  <div class="oh-titlebar-container mb-3">
+    <h1 class="oh-title">{% trans "Employee Access" %}</h1>
+    <p class="text-muted">{% trans "Assign access roles to employees. The rules behind each role live in the access_management policies." %}</p>
+  </div>
+
+  <form method="get" class="oh-search mb-3">
+    <input type="text" name="search" value="{{ search }}" class="oh-input"
+           placeholder="{% trans 'Search employees…' %}">
+    <button type="submit" class="oh-btn oh-btn--secondary">{% trans "Search" %}</button>
+  </form>
+
+  <table class="oh-table">
+    <thead>
+      <tr>
+        <th>{% trans "Employee" %}</th>
+        <th>{% trans "Email" %}</th>
+        <th>{% trans "Assigned roles" %}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.employee.employee_first_name }} {{ row.employee.employee_last_name }}</td>
+        <td>{{ row.employee.email }}</td>
+        <td>
+          {% for r in row.roles %}
+            <span class="oh-badge oh-badge--secondary">{{ r }}</span>
+          {% empty %}
+            <em class="text-muted">{% trans "none" %}</em>
+          {% endfor %}
+        </td>
+        <td>
+          <a class="oh-btn oh-btn--light" href="{% url 'cerbos-access-edit' row.employee.id %}">
+            {% trans "Edit access" %}
+          </a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4">{% trans "No employees found." %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="oh-pagination mt-3">
+    {% if page.has_previous %}
+      <a class="oh-btn oh-btn--light" href="?page={{ page.previous_page_number }}&search={{ search }}">«</a>
+    {% endif %}
+    <span>{% trans "Page" %} {{ page.number }} / {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}
+      <a class="oh-btn oh-btn--light" href="?page={{ page.next_page_number }}&search={{ search }}">»</a>
+    {% endif %}
+  </div>
+</div>
+{% endblock content %}

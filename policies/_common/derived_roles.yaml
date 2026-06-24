@@ -1,0 +1,25 @@
+# Shared derived roles for the ERP.
+#
+# A "derived role" is an EXTRA role Cerbos calculates on the fly from the
+# request context. Example: anyone is the "owner" of a record if their user id
+# matches the record's `owner` attribute. Resource policies import these by name.
+---
+apiVersion: api.cerbos.dev/v1
+derivedRoles:
+  name: common_erp_roles
+  definitions:
+    # The user owns this specific record.
+    - name: owner
+      parentRoles:
+        - employee
+      condition:
+        match:
+          expr: request.resource.attr.owner == request.principal.id
+
+    # The user is in the same department as the record.
+    - name: same_department
+      parentRoles:
+        - employee
+      condition:
+        match:
+          expr: request.resource.attr.department == request.principal.attr.department

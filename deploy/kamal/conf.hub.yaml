@@ -1,0 +1,37 @@
+# Cerbos config for HUB mode — policies distributed by Cerbos Hub, instead of the
+# disk/baked-image mode in conf.yaml.
+#
+# This repo stays the source of truth: Hub watches it, builds a tested bundle,
+# and the PDP pulls that bundle. Disk mode (conf.yaml) remains the DEFAULT; flip
+# to Hub by setting CERBOS_CONFIG=/conf.hub.yaml + the CERBOS_HUB_* secrets.
+# Full steps: integration/CERBOS_HUB.md
+---
+server:
+  httpListenAddr: ":3592"
+  grpcListenAddr: ":3593"
+  adminAPI:
+    enabled: false
+  playgroundEnabled: false
+
+storage:
+  driver: "hub"
+  hub:
+    remote:
+      # Which bundle to fetch. "latest" tracks your default branch; pin to a
+      # named label/release for reproducible, promote-style production deploys.
+      bundleLabel: "latest"
+      # The PDP caches the last good bundle and keeps serving if Hub is briefly
+      # unreachable. Leave disableBootstrap unset (false) for resilient startups.
+
+# Credentials are supplied via ENVIRONMENT, never in this file:
+#   CERBOS_HUB_CLIENT_ID, CERBOS_HUB_CLIENT_SECRET, CERBOS_HUB_WORKSPACE_SECRET
+# (optional) CERBOS_HUB_PDP_ID to give this PDP a stable identity in Hub.
+
+schema:
+  enforcement: none
+
+audit:
+  enabled: true
+  backend: "file"
+  file:
+    path: stdout

@@ -38,3 +38,10 @@ junit.*.xml
 test-times.json
 unit.cover
 
+# access-management hardening loop (generated review output)
+harden/review-findings.json
+
+# Python bytecode (integration apps: cerbos_access, erp)
+__pycache__/
+*.py[cod]
+

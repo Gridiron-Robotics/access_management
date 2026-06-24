@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Purchasing purchase order policy tests
+principals:
+  buyer_ben:
+    id: ben
+    roles: ["buyer", "employee"]
+    attr:
+      department: purchasing
+  manager_paula:
+    id: paula
+    roles: ["purchasing_manager", "employee"]
+    attr:
+      department: purchasing
+
+resources:
+  small_po:
+    id: po-001
+    kind: "purchasing:purchase_order"
+    attr:
+      owner: ben
+      amount: 5000
+  large_po:
+    id: po-002
+    kind: "purchasing:purchase_order"
+    attr:
+      owner: ben
+      amount: 100000
+
+tests:
+  - name: Buyer can create and submit their own PO but not approve
+    input:
+      principals: [buyer_ben]
+      resources: [small_po]
+      actions: [view, create, submit, approve]
+    expected:
+      - principal: buyer_ben
+        resource: small_po
+        actions:
+          view: EFFECT_ALLOW
+          create: EFFECT_ALLOW
+          submit: EFFECT_ALLOW
+          approve: EFFECT_DENY
+
+  - name: Manager can approve POs within the cap but not above it
+    input:
+      principals: [manager_paula]
+      resources: [small_po, large_po]
+      actions: [approve]
+    expected:
+      - principal: manager_paula
+        resource: small_po
+        actions:
+          approve: EFFECT_ALLOW
+      - principal: manager_paula
+        resource: large_po
+        actions:
+          approve: EFFECT_DENY

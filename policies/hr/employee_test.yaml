@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: HR employee record policy tests
+principals:
+  specialist_sam:
+    id: sam
+    roles: ["hr_specialist", "employee"]
+    attr:
+      department: hr
+  manager_hannah:
+    id: hannah
+    roles: ["hr_manager", "employee"]
+    attr:
+      department: hr
+  employee_emma:
+    id: emma
+    roles: ["employee"]
+    attr:
+      department: engineering
+
+resources:
+  emma_record:
+    id: rec-emma
+    kind: "hr:employee_record"
+    attr:
+      owner: emma
+      department: engineering
+  bob_record:
+    id: rec-bob
+    kind: "hr:employee_record"
+    attr:
+      owner: bob
+      department: engineering
+
+tests:
+  - name: HR specialist can view and edit records but not terminate
+    input:
+      principals: [specialist_sam]
+      resources: [bob_record]
+      actions: [view, edit, terminate]
+    expected:
+      - principal: specialist_sam
+        resource: bob_record
+        actions:
+          view: EFFECT_ALLOW
+          edit: EFFECT_ALLOW
+          terminate: EFFECT_DENY
+
+  - name: HR manager can terminate
+    input:
+      principals: [manager_hannah]
+      resources: [bob_record]
+      actions: [terminate]
+    expected:
+      - principal: manager_hannah
+        resource: bob_record
+        actions:
+          terminate: EFFECT_ALLOW
+
+  - name: Employee can view their own record only
+    input:
+      principals: [employee_emma]
+      resources: [emma_record, bob_record]
+      actions: [view, edit]
+    expected:
+      - principal: employee_emma
+        resource: emma_record
+        actions:
+          view: EFFECT_ALLOW
+          edit: EFFECT_DENY
+      - principal: employee_emma
+        resource: bob_record
+        actions:
+          view: EFFECT_DENY
+          edit: EFFECT_DENY

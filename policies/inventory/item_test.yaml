@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Inventory item policy tests
+principals:
+  clerk_carl:
+    id: carl
+    roles: ["warehouse_clerk", "employee"]
+    attr:
+      location: NYC
+  manager_mike:
+    id: mike
+    roles: ["warehouse_manager", "employee"]
+    attr:
+      location: NYC
+
+resources:
+  item_nyc:
+    id: itm-nyc
+    kind: "inventory:item"
+    attr:
+      location: NYC
+  item_la:
+    id: itm-la
+    kind: "inventory:item"
+    attr:
+      location: LA
+
+tests:
+  - name: Clerk can view and adjust items in their own location
+    input:
+      principals: [clerk_carl]
+      resources: [item_nyc]
+      actions: [view, create, adjust]
+    expected:
+      - principal: clerk_carl
+        resource: item_nyc
+        actions:
+          view: EFFECT_ALLOW
+          create: EFFECT_ALLOW
+          adjust: EFFECT_ALLOW
+
+  - name: Clerk can view but not adjust items in another location
+    input:
+      principals: [clerk_carl]
+      resources: [item_la]
+      actions: [view, adjust, transfer]
+    expected:
+      - principal: clerk_carl
+        resource: item_la
+        actions:
+          view: EFFECT_ALLOW
+          adjust: EFFECT_DENY
+          transfer: EFFECT_DENY
+
+  - name: Manager can transfer and delete items anywhere
+    input:
+      principals: [manager_mike]
+      resources: [item_la]
+      actions: [transfer, delete]
+    expected:
+      - principal: manager_mike
+        resource: item_la
+        actions:
+          transfer: EFFECT_ALLOW
+          delete: EFFECT_ALLOW

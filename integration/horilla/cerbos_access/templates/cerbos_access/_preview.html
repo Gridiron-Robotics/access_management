@@ -1,0 +1,22 @@
+{% load i18n %}
+<div class="oh-card p-3">
+  <h3 class="oh-label">{% trans "Effective access" %} — {{ principal.id }}</h3>
+  <p><strong>{% trans "Roles" %}:</strong> {{ principal.roles|join:", " }}</p>
+  {% if principal.attr %}
+    <p><strong>{% trans "Attributes" %}:</strong>
+      {% for k, v in principal.attr.items %}{{ k }}={{ v }}{% if not forloop.last %}, {% endif %}{% endfor %}
+    </p>
+  {% endif %}
+
+  {% if error %}
+    <p class="text-danger">{% trans "Could not reach the Cerbos PDP" %}: {{ error }}</p>
+    <p class="text-muted"><small>{% trans "Set CERBOS_PDP_URL in Horilla settings and ensure the PDP is reachable." %}</small></p>
+  {% elif allowed %}
+    <ul>
+      {% for a in allowed %}<li><code>{{ a.action }}</code> &rarr; <code>{{ a.kind }}</code></li>{% endfor %}
+    </ul>
+    <p class="text-muted"><small>{% trans "Computed against representative sample records." %}</small></p>
+  {% else %}
+    <p>{% trans "No access for the sample resources with the current roles." %}</p>
+  {% endif %}
+</div>

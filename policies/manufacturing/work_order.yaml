@@ -1,0 +1,34 @@
+# Manufacturing / Production module -> Work orders.
+# Operators run work orders on their own production line; supervisors oversee all.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "manufacturing:work_order"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view"]
+      effect: EFFECT_ALLOW
+      roles: ["operator", "supervisor"]
+
+    # Operators can start/complete work orders only on their assigned line.
+    - actions: ["start", "complete"]
+      effect: EFFECT_ALLOW
+      roles: ["operator"]
+      condition:
+        match:
+          expr: request.resource.attr.line == request.principal.attr.line
+
+    # Supervisors can start/complete on any line.
+    - actions: ["start", "complete"]
+      effect: EFFECT_ALLOW
+      roles: ["supervisor"]
+
+    - actions: ["cancel"]
+      effect: EFFECT_ALLOW
+      roles: ["supervisor"]
+
+    - actions: ["*"]
+      effect: EFFECT_ALLOW
+      roles: ["admin"]

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Kamal pre-deploy hook.
+#
+# Block the deploy unless the Cerbos policies compile AND all their tests pass.
+# Defense in depth: the policies are already baked into the image, but we
+# re-verify here so a broken access-rule set can never reach production.
+set -euo pipefail
+
+echo "[pre-deploy] Verifying ERP access policies before deploy..."
+STAGES="policies" bash harden/verify.sh
+echo "[pre-deploy] Policies compiled and tests passed. Proceeding with deploy."

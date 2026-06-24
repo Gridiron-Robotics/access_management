@@ -1,0 +1,30 @@
+# Purchasing / Procurement module -> Purchase orders.
+# Buyers create and submit POs; purchasing managers approve up to a $ cap.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "purchasing:purchase_order"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view", "create"]
+      effect: EFFECT_ALLOW
+      roles: ["buyer", "purchasing_manager"]
+
+    # The buyer who created the PO can submit it for approval.
+    - actions: ["submit"]
+      effect: EFFECT_ALLOW
+      derivedRoles: ["owner"]
+
+    # Managers approve, but only up to $25,000.
+    - actions: ["approve"]
+      effect: EFFECT_ALLOW
+      roles: ["purchasing_manager"]
+      condition:
+        match:
+          expr: request.resource.attr.amount <= 25000
+
+    - actions: ["*"]
+      effect: EFFECT_ALLOW
+      roles: ["admin"]

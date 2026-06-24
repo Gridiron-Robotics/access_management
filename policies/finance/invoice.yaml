@@ -1,0 +1,30 @@
+# Finance module -> Invoices.
+# Models: accountants do day-to-day work, finance managers approve (with a $ cap),
+# owners can see their own, admins can do anything.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "finance:invoice"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view", "create"]
+      effect: EFFECT_ALLOW
+      roles: ["accountant"]
+
+    - actions: ["view"]
+      effect: EFFECT_ALLOW
+      derivedRoles: ["owner"]
+
+    # Managers can approve, but only invoices under $10,000 (RBAC -> ABAC).
+    - actions: ["approve"]
+      effect: EFFECT_ALLOW
+      roles: ["finance_manager"]
+      condition:
+        match:
+          expr: request.resource.attr.amount < 10000
+
+    - actions: ["*"]
+      effect: EFFECT_ALLOW
+      roles: ["admin"]

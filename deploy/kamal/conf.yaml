@@ -1,0 +1,32 @@
+# Production Cerbos configuration, baked into the deployed image.
+# Docs: https://docs.cerbos.dev/cerbos/latest/configuration/
+---
+server:
+  # Plain HTTP/gRPC inside the container. TLS is terminated at the kamal-proxy
+  # edge (see config/deploy.yml -> proxy.ssl), so we do not configure TLS here.
+  httpListenAddr: ":3592"
+  grpcListenAddr: ":3593"
+  # Admin API and playground stay OFF in production.
+  adminAPI:
+    enabled: false
+  playgroundEnabled: false
+
+storage:
+  # Policies are baked into the image at /policies (see deploy/kamal/Dockerfile).
+  # Immutable per deploy: to change policies, build & deploy a new image.
+  driver: "disk"
+  disk:
+    directory: /policies
+    watchForChanges: false
+
+schema:
+  # We do not ship JSON schemas for resource attributes yet, so do not enforce.
+  # Tighten to "warn" or "reject" once you add schemas under policies/_schemas.
+  enforcement: none
+
+audit:
+  # Emit an audit trail of every decision to stdout (captured by Docker logs).
+  enabled: true
+  backend: "file"
+  file:
+    path: stdout

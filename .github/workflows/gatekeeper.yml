@@ -1,0 +1,54 @@
+# Gatekeeper — the outer loop. Blocks a PR from merging unless our
+# deploy-readiness gate is green: ERP policies compile + pass tests, the Helm
+# chart lints, and the Kamal config is valid. The upstream engine build/test is
+# covered by pr-test.yaml, so we don't duplicate it here.
+name: Gatekeeper (deploy-readiness)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "policies/**"
+      - "deploy/kamal/**"
+      - "deploy/charts/cerbos/**"
+      - "config/deploy.yml"
+      - ".kamal/**"
+      - "Gemfile"
+      - "harden/**"
+      - ".github/workflows/gatekeeper.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gatekeeper-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      # kamal config interpolates this from .kamal/secrets; a dummy value is
+      # enough to render & validate the configuration in CI.
+      KAMAL_REGISTRY_PASSWORD: dummy
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.x"
+          cache: true
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Install Kamal 2.11.0
+        run: gem install kamal -v 2.11.0
+
+      - name: Run deploy-readiness gate
+        run: STAGES="policies helm kamal" bash harden/verify.sh
