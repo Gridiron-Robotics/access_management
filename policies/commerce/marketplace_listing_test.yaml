@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Commerce marketplace listing policy tests
+principals:
+  amazon_amy:
+    id: amy
+    roles: ["channel_manager", "employee"]
+    attr: { tenant_id: tenant-a, channels: ["amazon"] }
+  ebay_eve:
+    id: eve
+    roles: ["channel_manager", "employee"]
+    attr: { tenant_id: tenant-a, channels: ["ebay"] }
+  analyst_ann: { id: ann, roles: ["pricing_analyst", "employee"], attr: { tenant_id: tenant-a } }
+  bot_bea:     { id: bea, roles: ["agent_operator", "employee"],  attr: { tenant_id: tenant-a } }
+  pm_pat:      { id: pat, roles: ["pricing_manager", "employee"], attr: { tenant_id: tenant-a } }
+
+resources:
+  amazon_listing:
+    id: l1
+    kind: "commerce:marketplace_listing"
+    attr: { tenant_id: tenant-a, channel: amazon, new_price: 120, floor_price: 100, change_percent: 5, approved_by_human: false }
+  big_move:
+    id: l2
+    kind: "commerce:marketplace_listing"
+    attr: { tenant_id: tenant-a, channel: amazon, new_price: 200, floor_price: 100, change_percent: 60, approved_by_human: false }
+  below_floor:
+    id: l3
+    kind: "commerce:marketplace_listing"
+    attr: { tenant_id: tenant-a, channel: amazon, new_price: 80, floor_price: 100, change_percent: 20, approved_by_human: false }
+  below_floor_ok:
+    id: l4
+    kind: "commerce:marketplace_listing"
+    attr: { tenant_id: tenant-a, channel: amazon, new_price: 80, floor_price: 100, change_percent: 20, approved_by_human: true }
+
+tests:
+  - name: A channel manager publishes only on their own channel
+    input:
+      principals: [amazon_amy, ebay_eve]
+      resources: [amazon_listing]
+      actions: [publish, update]
+    expected:
+      - { principal: amazon_amy, resource: amazon_listing, actions: { publish: EFFECT_ALLOW, update: EFFECT_ALLOW } }
+      - { principal: ebay_eve,   resource: amazon_listing, actions: { publish: EFFECT_DENY,  update: EFFECT_DENY } }
+
+  - name: Automated repricing is allowed inside the guardrails only
+    input:
+      principals: [analyst_ann, bot_bea]
+      resources: [amazon_listing, big_move]
+      actions: [reprice]
+    expected:
+      - { principal: analyst_ann, resource: amazon_listing, actions: { reprice: EFFECT_ALLOW } }
+      - { principal: bot_bea,     resource: amazon_listing, actions: { reprice: EFFECT_ALLOW } }
+      - { principal: analyst_ann, resource: big_move,       actions: { reprice: EFFECT_DENY } }
+      - { principal: bot_bea,     resource: big_move,       actions: { reprice: EFFECT_DENY } }
+
+  - name: Selling below the floor is denied to everyone without a human decision
+    input:
+      principals: [analyst_ann, bot_bea, pm_pat]
+      resources: [below_floor]
+      actions: [reprice]
+    expected:
+      - { principal: analyst_ann, resource: below_floor, actions: { reprice: EFFECT_DENY } }
+      - { principal: bot_bea,     resource: below_floor, actions: { reprice: EFFECT_DENY } }
+      - { principal: pm_pat,      resource: below_floor, actions: { reprice: EFFECT_DENY } }
+
+  - name: A pricing manager with an approval may go below the floor
+    input:
+      principals: [pm_pat, bot_bea]
+      resources: [below_floor_ok]
+      actions: [reprice]
+    expected:
+      - { principal: pm_pat,  resource: below_floor_ok, actions: { reprice: EFFECT_ALLOW } }
+      - { principal: bot_bea, resource: below_floor_ok, actions: { reprice: EFFECT_DENY } }

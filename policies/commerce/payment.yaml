@@ -1,0 +1,73 @@
+# Commerce -> Payments (card capture, ACH debit/credit, wire).
+#
+# Separated from refunds on purpose: charging a customer and paying money out
+# are different authorities and different blast radii. ACH is banded harder than
+# card because an ACH credit is a push of funds to an external account, and a
+# mistake there is recovered by a phone call to a bank rather than a reversal.
+#
+# The gateway sets:
+#   resource.attr.method     "card" | "ach_debit" | "ach_credit" | "wire"
+#   resource.attr.amount     the amount being moved
+#   resource.attr.approved_by_human
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "commerce:payment"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view", "list"]
+      effect: EFFECT_ALLOW
+      roles: ["accountant", "finance_manager", "support_agent", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    # Taking money IN. Routine, and the customer authorised it at checkout.
+    - actions: ["charge", "authorize", "capture"]
+      effect: EFFECT_ALLOW
+      roles: ["accountant", "finance_manager", "agent_operator", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.method == "card"
+
+    # Pulling by ACH debit — same direction, slower to unwind, so finance only.
+    - actions: ["charge"]
+      effect: EFFECT_ALLOW
+      roles: ["finance_manager", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.method == "ach_debit"
+              - expr: request.resource.attr.amount < 25000
+
+    # Pushing money OUT (ACH credit / wire) ALWAYS needs a human, at any amount.
+    # There is no band below which an outbound push is routine.
+    - actions: ["disburse"]
+      effect: EFFECT_ALLOW
+      roles: ["finance_manager", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.method in ["ach_credit", "wire"]
+              - expr: request.resource.attr.approved_by_human == true
+
+    # No agent may move money out, ever.
+    - actions: ["disburse"]
+      effect: EFFECT_DENY
+      roles: ["agent_operator", "agent_supervisor"]
+
+    - actions: ["void"]
+      effect: EFFECT_ALLOW
+      roles: ["finance_manager", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id

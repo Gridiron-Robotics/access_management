@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Commerce RMA policy tests
+principals:
+  support_sue:  { id: sue, roles: ["support_agent", "employee"],   attr: { tenant_id: tenant-a } }
+  manager_mia:  { id: mia, roles: ["support_manager", "employee"], attr: { tenant_id: tenant-a } }
+  clerk_carl:   { id: carl, roles: ["warehouse_clerk", "employee"], attr: { tenant_id: tenant-a } }
+  bot_bea:      { id: bea, roles: ["agent_operator", "employee"],  attr: { tenant_id: tenant-a } }
+
+resources:
+  in_window:      { id: m1, kind: "commerce:rma", attr: { tenant_id: tenant-a, within_return_window: true,  approved_by_human: false } }
+  out_of_window:  { id: m2, kind: "commerce:rma", attr: { tenant_id: tenant-a, within_return_window: false, approved_by_human: false } }
+  out_ok:         { id: m3, kind: "commerce:rma", attr: { tenant_id: tenant-a, within_return_window: false, approved_by_human: true } }
+
+tests:
+  - name: In-window returns are routine; out-of-window ones are not
+    input:
+      principals: [support_sue]
+      resources: [in_window, out_of_window]
+      actions: [authorize]
+    expected:
+      - { principal: support_sue, resource: in_window,     actions: { authorize: EFFECT_ALLOW } }
+      - { principal: support_sue, resource: out_of_window, actions: { authorize: EFFECT_DENY } }
+
+  - name: A manager can make the goodwill call, with an approval on file
+    input:
+      principals: [manager_mia]
+      resources: [out_of_window, out_ok]
+      actions: [authorize, authorize_warranty_claim]
+    expected:
+      - { principal: manager_mia, resource: out_of_window, actions: { authorize: EFFECT_DENY, authorize_warranty_claim: EFFECT_ALLOW } }
+      - { principal: manager_mia, resource: out_ok,        actions: { authorize: EFFECT_ALLOW, authorize_warranty_claim: EFFECT_ALLOW } }
+
+  - name: The agent may open an RMA but not authorize one
+    input:
+      principals: [bot_bea]
+      resources: [in_window]
+      actions: [create, authorize]
+    expected:
+      - { principal: bot_bea, resource: in_window, actions: { create: EFFECT_ALLOW, authorize: EFFECT_DENY } }
+
+  - name: Warehouse handles the goods, not the authorization
+    input:
+      principals: [clerk_carl]
+      resources: [in_window]
+      actions: [receive, restock, authorize]
+    expected:
+      - { principal: clerk_carl, resource: in_window, actions: { receive: EFFECT_ALLOW, restock: EFFECT_ALLOW, authorize: EFFECT_DENY } }

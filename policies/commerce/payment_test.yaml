@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Commerce payment policy tests
+principals:
+  accountant_ann: { id: ann,  roles: ["accountant", "employee"],     attr: { tenant_id: tenant-a } }
+  finance_fred:   { id: fred, roles: ["finance_manager", "employee"], attr: { tenant_id: tenant-a } }
+  bot_bea:        { id: bea,  roles: ["agent_operator", "employee"],  attr: { tenant_id: tenant-a } }
+  admin_other:    { id: otto, roles: ["admin", "employee"],           attr: { tenant_id: tenant-b } }
+
+resources:
+  card:        { id: p1, kind: "commerce:payment", attr: { tenant_id: tenant-a, method: card,       amount: 400,   approved_by_human: false } }
+  ach_debit:   { id: p2, kind: "commerce:payment", attr: { tenant_id: tenant-a, method: ach_debit,  amount: 5000,  approved_by_human: false } }
+  ach_big:     { id: p3, kind: "commerce:payment", attr: { tenant_id: tenant-a, method: ach_debit,  amount: 90000, approved_by_human: false } }
+  ach_credit:  { id: p4, kind: "commerce:payment", attr: { tenant_id: tenant-a, method: ach_credit, amount: 100,   approved_by_human: false } }
+  ach_cred_ok: { id: p5, kind: "commerce:payment", attr: { tenant_id: tenant-a, method: ach_credit, amount: 100,   approved_by_human: true } }
+
+tests:
+  - name: Card charges are routine for accountants and the agent
+    input:
+      principals: [accountant_ann, bot_bea]
+      resources: [card]
+      actions: [charge, capture]
+    expected:
+      - { principal: accountant_ann, resource: card, actions: { charge: EFFECT_ALLOW, capture: EFFECT_ALLOW } }
+      - { principal: bot_bea,        resource: card, actions: { charge: EFFECT_ALLOW, capture: EFFECT_ALLOW } }
+
+  - name: ACH debit is finance-only and capped
+    input:
+      principals: [accountant_ann, finance_fred]
+      resources: [ach_debit, ach_big]
+      actions: [charge]
+    expected:
+      - { principal: accountant_ann, resource: ach_debit, actions: { charge: EFFECT_DENY } }
+      - { principal: finance_fred,   resource: ach_debit, actions: { charge: EFFECT_ALLOW } }
+      - { principal: finance_fred,   resource: ach_big,   actions: { charge: EFFECT_DENY } }
+
+  - name: Pushing money out always needs a human, even for $100
+    input:
+      principals: [finance_fred]
+      resources: [ach_credit, ach_cred_ok]
+      actions: [disburse]
+    expected:
+      - { principal: finance_fred, resource: ach_credit,  actions: { disburse: EFFECT_DENY } }
+      - { principal: finance_fred, resource: ach_cred_ok, actions: { disburse: EFFECT_ALLOW } }
+
+  - name: No agent may disburse, approved or not
+    input:
+      principals: [bot_bea]
+      resources: [ach_credit, ach_cred_ok]
+      actions: [disburse]
+    expected:
+      - { principal: bot_bea, resource: ach_credit,  actions: { disburse: EFFECT_DENY } }
+      - { principal: bot_bea, resource: ach_cred_ok, actions: { disburse: EFFECT_DENY } }
+
+  - name: Cross-tenant admin is denied the money path
+    input:
+      principals: [admin_other]
+      resources: [card, ach_cred_ok]
+      actions: [charge, disburse, void]
+    expected:
+      - { principal: admin_other, resource: card,        actions: { charge: EFFECT_DENY, void: EFFECT_DENY } }
+      - { principal: admin_other, resource: ach_cred_ok, actions: { disburse: EFFECT_DENY, void: EFFECT_DENY } }

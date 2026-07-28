@@ -1,0 +1,57 @@
+# Commerce -> Catalog and fitment data (ACES/PIES).
+#
+# Fitment is safety-adjacent: a wrong application says a tire fits a vehicle it
+# does not fit. Publishing it is therefore a narrower grant than editing
+# marketing copy on the same record.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "commerce:catalog"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view", "list", "search"]
+      effect: EFFECT_ALLOW
+      roles: ["sales_rep", "support_agent", "warehouse_clerk", "catalog_manager", "agent_operator", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    - actions: ["create", "update"]
+      effect: EFFECT_ALLOW
+      roles: ["catalog_manager", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    # Fitment says "this part fits this vehicle". Getting it wrong puts the
+    # wrong tire on a car, so publishing it is narrower than editing copy.
+    - actions: ["publish_fitment"]
+      effect: EFFECT_ALLOW
+      roles: ["catalog_manager", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.fitment_validated == true
+
+    - actions: ["publish_fitment"]
+      effect: EFFECT_DENY
+      roles: ["catalog_manager", "admin", "agent_operator"]
+      condition:
+        match:
+          expr: request.resource.attr.fitment_validated != true
+
+    # Bulk imports from a distributor feed touch thousands of records at once.
+    - actions: ["bulk_import"]
+      effect: EFFECT_ALLOW
+      derivedRoles: ["distributor_operator"]
+
+    - actions: ["delete"]
+      effect: EFFECT_ALLOW
+      roles: ["admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id

@@ -1,0 +1,94 @@
+# Commerce -> Refunds.
+#
+# The most consequential resource in the estate: a refund moves real money OUT,
+# it is initiated by an autonomous agent, and it is the one action where a
+# mistake is not recoverable by retrying. Authority is therefore banded by
+# amount rather than granted wholesale, and the top band requires a human.
+#
+# Bands (per refund, in the order's currency minor-unit-free amount):
+#   < 250        support agents — routine "sorry about that" refunds
+#   < 2,500      support managers
+#   < 10,000     finance managers
+#   >= 10,000    finance manager AND a recorded human approval
+#
+# Note what is NOT here: no rule lets any role refund an arbitrary amount
+# unconditionally. `admin` is bounded too. An unbounded refund permission is
+# indistinguishable from an unbounded withdrawal permission.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "commerce:refund"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view", "list"]
+      effect: EFFECT_ALLOW
+      roles: ["support_agent", "support_manager", "finance_manager", "accountant", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    # Anyone may propose a refund; proposing is not paying.
+    - actions: ["propose"]
+      effect: EFFECT_ALLOW
+      roles: ["support_agent", "support_manager", "finance_manager", "agent_operator", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    - actions: ["issue"]
+      effect: EFFECT_ALLOW
+      roles: ["support_agent"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.amount < 250
+
+    - actions: ["issue"]
+      effect: EFFECT_ALLOW
+      roles: ["support_manager"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.amount < 2500
+
+    - actions: ["issue"]
+      effect: EFFECT_ALLOW
+      roles: ["finance_manager", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.amount < 10000
+
+    # Above the top band, the role is necessary but not sufficient.
+    - actions: ["issue"]
+      effect: EFFECT_ALLOW
+      roles: ["finance_manager", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.amount >= 10000
+              - expr: request.resource.attr.approved_by_human == true
+
+    # An autonomous agent may never issue a refund on its own authority,
+    # whatever the amount. It proposes; a human issues.
+    - actions: ["issue"]
+      effect: EFFECT_DENY
+      roles: ["agent_operator", "agent_supervisor"]
+
+    # Reversing an already-issued refund is finance-only and always logged.
+    - actions: ["reverse"]
+      effect: EFFECT_ALLOW
+      roles: ["finance_manager", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id

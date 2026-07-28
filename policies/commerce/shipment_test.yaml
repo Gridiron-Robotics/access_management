@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Commerce shipment policy tests
+principals:
+  clerk_carl: { id: carl, roles: ["warehouse_clerk", "employee"],   attr: { tenant_id: tenant-a } }
+  wm_wanda:   { id: wanda, roles: ["warehouse_manager", "employee"], attr: { tenant_id: tenant-a } }
+  bot_bea:    { id: bea,  roles: ["agent_operator", "employee"],    attr: { tenant_id: tenant-a } }
+
+resources:
+  parcel:       { id: s1, kind: "commerce:shipment", attr: { tenant_id: tenant-a, cost: 22,   approved_by_human: false } }
+  freight:      { id: s2, kind: "commerce:shipment", attr: { tenant_id: tenant-a, cost: 1800, approved_by_human: false } }
+  freight_ok:   { id: s3, kind: "commerce:shipment", attr: { tenant_id: tenant-a, cost: 1800, approved_by_human: true } }
+
+tests:
+  - name: Routine parcel labels are open to the warehouse and the agent
+    input:
+      principals: [clerk_carl, bot_bea]
+      resources: [parcel]
+      actions: [buy_label, void_label, track]
+    expected:
+      - { principal: clerk_carl, resource: parcel, actions: { buy_label: EFFECT_ALLOW, void_label: EFFECT_ALLOW, track: EFFECT_ALLOW } }
+      - { principal: bot_bea,    resource: parcel, actions: { buy_label: EFFECT_ALLOW, void_label: EFFECT_DENY,  track: EFFECT_ALLOW } }
+
+  - name: Freight needs a manager and a human approval
+    input:
+      principals: [clerk_carl, bot_bea, wm_wanda]
+      resources: [freight, freight_ok]
+      actions: [buy_label]
+    expected:
+      - { principal: clerk_carl, resource: freight,    actions: { buy_label: EFFECT_DENY } }
+      - { principal: bot_bea,    resource: freight,    actions: { buy_label: EFFECT_DENY } }
+      - { principal: wm_wanda,   resource: freight,    actions: { buy_label: EFFECT_DENY } }
+      - { principal: clerk_carl, resource: freight_ok, actions: { buy_label: EFFECT_DENY } }
+      - { principal: bot_bea,    resource: freight_ok, actions: { buy_label: EFFECT_DENY } }
+      - { principal: wm_wanda,   resource: freight_ok, actions: { buy_label: EFFECT_ALLOW } }

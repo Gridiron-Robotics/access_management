@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+#
+# Refund authority. Money leaving the business, initiated by an agent — the
+# case where a wrong ALLOW is not recoverable by retrying.
+---
+name: Commerce refund policy tests
+principals:
+  agent_amy:
+    id: amy
+    roles: ["support_agent", "employee"]
+    attr: { tenant_id: tenant-a }
+  manager_mia:
+    id: mia
+    roles: ["support_manager", "employee"]
+    attr: { tenant_id: tenant-a }
+  finance_fred:
+    id: fred
+    roles: ["finance_manager", "employee"]
+    attr: { tenant_id: tenant-a }
+  bot_bea:
+    id: bea
+    roles: ["agent_operator", "employee"]
+    attr: { tenant_id: tenant-a }
+  admin_ada:
+    id: ada
+    roles: ["admin", "employee"]
+    attr: { tenant_id: tenant-a }
+  admin_other_tenant:
+    id: otto
+    roles: ["admin", "employee"]
+    attr: { tenant_id: tenant-b }
+
+resources:
+  small:      { id: r1, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 100,   approved_by_human: false } }
+  medium:     { id: r2, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 1500,  approved_by_human: false } }
+  large:      { id: r3, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 8000,  approved_by_human: false } }
+  huge:       { id: r4, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 25000, approved_by_human: false } }
+  huge_ok:    { id: r5, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 25000, approved_by_human: true } }
+
+tests:
+  - name: Support agent may issue only small refunds
+    input:
+      principals: [agent_amy]
+      resources: [small, medium, large, huge]
+      actions: [issue]
+    expected:
+      - { principal: agent_amy, resource: small,  actions: { issue: EFFECT_ALLOW } }
+      - { principal: agent_amy, resource: medium, actions: { issue: EFFECT_DENY } }
+      - { principal: agent_amy, resource: large,  actions: { issue: EFFECT_DENY } }
+      - { principal: agent_amy, resource: huge,   actions: { issue: EFFECT_DENY } }
+
+  - name: Support manager reaches the next band but not beyond it
+    input:
+      principals: [manager_mia]
+      resources: [medium, large]
+      actions: [issue]
+    expected:
+      - { principal: manager_mia, resource: medium, actions: { issue: EFFECT_ALLOW } }
+      - { principal: manager_mia, resource: large,  actions: { issue: EFFECT_DENY } }
+
+  - name: Finance manager is bounded too, until a human approves
+    input:
+      principals: [finance_fred]
+      resources: [large, huge, huge_ok]
+      actions: [issue]
+    expected:
+      - { principal: finance_fred, resource: large,   actions: { issue: EFFECT_ALLOW } }
+      - { principal: finance_fred, resource: huge,    actions: { issue: EFFECT_DENY } }
+      - { principal: finance_fred, resource: huge_ok, actions: { issue: EFFECT_ALLOW } }
+
+  - name: Admin has no unbounded refund authority either
+    input:
+      principals: [admin_ada]
+      resources: [huge, huge_ok]
+      actions: [issue]
+    expected:
+      - { principal: admin_ada, resource: huge,    actions: { issue: EFFECT_DENY } }
+      - { principal: admin_ada, resource: huge_ok, actions: { issue: EFFECT_ALLOW } }
+
+  - name: An agent may propose but never issue, at any amount
+    input:
+      principals: [bot_bea]
+      resources: [small, huge_ok]
+      actions: [propose, issue]
+    expected:
+      - { principal: bot_bea, resource: small,   actions: { propose: EFFECT_ALLOW, issue: EFFECT_DENY } }
+      - { principal: bot_bea, resource: huge_ok, actions: { propose: EFFECT_ALLOW, issue: EFFECT_DENY } }
+
+  - name: Another tenant's admin cannot touch these refunds
+    input:
+      principals: [admin_other_tenant]
+      resources: [small, huge_ok]
+      actions: [view, issue, reverse]
+    expected:
+      - { principal: admin_other_tenant, resource: small,   actions: { view: EFFECT_DENY, issue: EFFECT_DENY, reverse: EFFECT_DENY } }
+      - { principal: admin_other_tenant, resource: huge_ok, actions: { view: EFFECT_DENY, issue: EFFECT_DENY, reverse: EFFECT_DENY } }

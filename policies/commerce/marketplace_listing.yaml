@@ -1,0 +1,68 @@
+# Commerce -> Marketplace listings and repricing.
+#
+# Publishing and repricing are channel-scoped: someone who runs the eBay
+# channel has no business editing Amazon prices. That is `channel_operator`,
+# which checks tenant AND channel membership together.
+#
+# Repricing is banded by how far the new price moves. A small automated
+# adjustment inside a rule's guardrails is routine; a large move is either a
+# pricing decision or a bug, and both deserve a human.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "commerce:marketplace_listing"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view", "list"]
+      effect: EFFECT_ALLOW
+      roles: ["sales_rep", "channel_manager", "pricing_analyst", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    - actions: ["create", "update"]
+      effect: EFFECT_ALLOW
+      derivedRoles: ["channel_operator"]
+
+    # Publishing puts the listing in front of customers on that marketplace.
+    - actions: ["publish", "unpublish"]
+      effect: EFFECT_ALLOW
+      derivedRoles: ["channel_operator"]
+
+    # Automated repricing within the rule's guardrails: at or above the floor,
+    # and a move of 15% or less.
+    - actions: ["reprice"]
+      effect: EFFECT_ALLOW
+      roles: ["pricing_analyst", "agent_operator"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.new_price >= request.resource.attr.floor_price
+              - expr: request.resource.attr.change_percent <= 15
+
+    # A bigger move, or one that breaks the floor, needs a pricing manager.
+    - actions: ["reprice"]
+      effect: EFFECT_ALLOW
+      roles: ["pricing_manager", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.approved_by_human == true
+
+    # Selling below the floor is a loss by construction. No role does this
+    # without an explicit human decision — including admin.
+    - actions: ["reprice"]
+      effect: EFFECT_DENY
+      roles: ["pricing_analyst", "agent_operator", "pricing_manager", "admin", "channel_manager"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.new_price < request.resource.attr.floor_price
+              - expr: request.resource.attr.approved_by_human != true

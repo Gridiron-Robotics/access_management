@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Commerce tax policy tests
+principals:
+  finance_fred: { id: fred, roles: ["finance_manager", "employee"], attr: { tenant_id: tenant-a } }
+  accountant_ann: { id: ann, roles: ["accountant", "employee"],     attr: { tenant_id: tenant-a } }
+  bot_bea:      { id: bea,  roles: ["agent_operator", "employee"],  attr: { tenant_id: tenant-a } }
+
+resources:
+  cfg:    { id: t1, kind: "commerce:tax", attr: { tenant_id: tenant-a, approved_by_human: false } }
+  cfg_ok: { id: t2, kind: "commerce:tax", attr: { tenant_id: tenant-a, approved_by_human: true } }
+
+tests:
+  - name: The agent may quote tax but change nothing
+    input:
+      principals: [bot_bea]
+      resources: [cfg, cfg_ok]
+      actions: [quote, configure_nexus, update_rate, file_return, remit]
+    expected:
+      - principal: bot_bea
+        resource: cfg
+        actions:
+          quote: EFFECT_ALLOW
+          configure_nexus: EFFECT_DENY
+          update_rate: EFFECT_DENY
+          file_return: EFFECT_DENY
+          remit: EFFECT_DENY
+      - principal: bot_bea
+        resource: cfg_ok
+        actions:
+          quote: EFFECT_ALLOW
+          configure_nexus: EFFECT_DENY
+          update_rate: EFFECT_DENY
+          file_return: EFFECT_DENY
+          remit: EFFECT_DENY
+
+  - name: An accountant may quote but not reconfigure nexus
+    input:
+      principals: [accountant_ann]
+      resources: [cfg]
+      actions: [quote, configure_nexus, grant_exemption]
+    expected:
+      - principal: accountant_ann
+        resource: cfg
+        actions: { quote: EFFECT_ALLOW, configure_nexus: EFFECT_DENY, grant_exemption: EFFECT_DENY }
+
+  - name: Filing a return needs a human even for finance
+    input:
+      principals: [finance_fred]
+      resources: [cfg, cfg_ok]
+      actions: [configure_nexus, file_return, remit]
+    expected:
+      - { principal: finance_fred, resource: cfg,    actions: { configure_nexus: EFFECT_ALLOW, file_return: EFFECT_DENY, remit: EFFECT_DENY } }
+      - { principal: finance_fred, resource: cfg_ok, actions: { configure_nexus: EFFECT_ALLOW, file_return: EFFECT_ALLOW, remit: EFFECT_ALLOW } }

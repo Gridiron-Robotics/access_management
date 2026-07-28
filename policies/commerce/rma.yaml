@@ -1,0 +1,64 @@
+# Commerce -> Returns / RMA authorization.
+#
+# Authorizing a return commits to accepting goods back and, usually, to a
+# refund. Kept separate from commerce:refund so that "you may authorise this
+# return" and "you may move this money" stay distinct grants.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "commerce:rma"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view", "list"]
+      effect: EFFECT_ALLOW
+      roles: ["support_agent", "support_manager", "warehouse_clerk", "accountant", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    - actions: ["create"]
+      effect: EFFECT_ALLOW
+      roles: ["support_agent", "support_manager", "agent_operator", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    # Inside the published return window this is routine.
+    - actions: ["authorize"]
+      effect: EFFECT_ALLOW
+      roles: ["support_agent", "support_manager", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.within_return_window == true
+
+    # Outside the window it is a goodwill decision, and a manager makes it.
+    - actions: ["authorize"]
+      effect: EFFECT_ALLOW
+      roles: ["support_manager", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.within_return_window != true
+              - expr: request.resource.attr.approved_by_human == true
+
+    # Warranty claims against the manufacturer are their own authority.
+    - actions: ["authorize_warranty_claim"]
+      effect: EFFECT_ALLOW
+      roles: ["support_manager", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    - actions: ["receive", "inspect", "restock"]
+      effect: EFFECT_ALLOW
+      roles: ["warehouse_clerk", "warehouse_manager", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id

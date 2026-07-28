@@ -1,0 +1,160 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+#
+# Tool-dispatch authorization. This is the decision that stands between an
+# autonomous agent and every write surface in the estate, so the DENY cases
+# below matter more than the ALLOW ones.
+---
+name: Agent MCP tool dispatch policy tests
+principals:
+  operator_olive:            # routine agent operator, tenant A
+    id: olive
+    roles: ["agent_operator", "employee"]
+    attr:
+      tenant_id: tenant-a
+      tool_scopes: ["inventree", "bigcapital"]
+  supervisor_sam:            # may dispatch destructive tools, tenant A
+    id: sam
+    roles: ["agent_supervisor", "employee"]
+    attr:
+      tenant_id: tenant-a
+      tool_scopes: ["inventree", "bigcapital"]
+  admin_ada:                 # admin OF TENANT A, not of the estate
+    id: ada
+    roles: ["admin", "employee"]
+    attr:
+      tenant_id: tenant-a
+      tool_scopes: ["inventree", "bigcapital", "payments"]
+  admin_bob:                 # admin of a DIFFERENT tenant
+    id: bob
+    roles: ["admin", "employee"]
+    attr:
+      tenant_id: tenant-b
+      tool_scopes: ["inventree", "bigcapital", "payments"]
+
+resources:
+  read_tool:
+    id: t-1
+    kind: "agent:mcp_tool"
+    attr:
+      tenant_id: tenant-a
+      server: inventree
+      tool: list_stock
+      destructive: false
+      approved: false
+  destructive_unapproved:
+    id: t-2
+    kind: "agent:mcp_tool"
+    attr:
+      tenant_id: tenant-a
+      server: inventree
+      tool: delete_stock_item
+      destructive: true
+      approved: false
+  destructive_approved:
+    id: t-3
+    kind: "agent:mcp_tool"
+    attr:
+      tenant_id: tenant-a
+      server: inventree
+      tool: delete_stock_item
+      destructive: true
+      approved: true
+  out_of_scope_tool:
+    id: t-4
+    kind: "agent:mcp_tool"
+    attr:
+      tenant_id: tenant-a
+      server: payments
+      tool: disburse
+      destructive: false
+      approved: false
+
+tests:
+  - name: Operator can dispatch a non-destructive tool in scope
+    input:
+      principals: [operator_olive]
+      resources: [read_tool]
+      actions: [dispatch, list, describe]
+    expected:
+      - principal: operator_olive
+        resource: read_tool
+        actions:
+          dispatch: EFFECT_ALLOW
+          list: EFFECT_ALLOW
+          describe: EFFECT_ALLOW
+
+  - name: Operator cannot reach a server outside its tool_scopes
+    input:
+      principals: [operator_olive]
+      resources: [out_of_scope_tool]
+      actions: [dispatch]
+    expected:
+      - principal: operator_olive
+        resource: out_of_scope_tool
+        actions:
+          dispatch: EFFECT_DENY
+
+  - name: Operator cannot dispatch a destructive tool at all
+    input:
+      principals: [operator_olive]
+      resources: [destructive_unapproved, destructive_approved]
+      actions: [dispatch]
+    expected:
+      - principal: operator_olive
+        resource: destructive_unapproved
+        actions: { dispatch: EFFECT_DENY }
+      - principal: operator_olive
+        resource: destructive_approved
+        actions: { dispatch: EFFECT_DENY }
+
+  - name: Supervisor needs a recorded human approval for a destructive tool
+    input:
+      principals: [supervisor_sam]
+      resources: [destructive_unapproved, destructive_approved]
+      actions: [dispatch]
+    expected:
+      - principal: supervisor_sam
+        resource: destructive_unapproved
+        actions: { dispatch: EFFECT_DENY }
+      - principal: supervisor_sam
+        resource: destructive_approved
+        actions: { dispatch: EFFECT_ALLOW }
+
+  - name: Even an admin cannot dispatch a destructive tool unapproved
+    input:
+      principals: [admin_ada]
+      resources: [destructive_unapproved]
+      actions: [dispatch]
+    expected:
+      - principal: admin_ada
+        resource: destructive_unapproved
+        actions: { dispatch: EFFECT_DENY }
+
+  - name: An admin of another tenant is denied everything, including administer
+    input:
+      principals: [admin_bob]
+      resources: [read_tool, destructive_approved]
+      actions: [dispatch, list, describe, administer]
+    expected:
+      - principal: admin_bob
+        resource: read_tool
+        actions:
+          dispatch: EFFECT_DENY
+          list: EFFECT_DENY
+          describe: EFFECT_DENY
+          administer: EFFECT_DENY
+      - principal: admin_bob
+        resource: destructive_approved
+        actions:
+          dispatch: EFFECT_DENY
+          administer: EFFECT_DENY
+
+  - name: Tenant admin may administer the gateway
+    input:
+      principals: [admin_ada]
+      resources: [read_tool]
+      actions: [administer]
+    expected:
+      - principal: admin_ada
+        resource: read_tool
+        actions: { administer: EFFECT_ALLOW }

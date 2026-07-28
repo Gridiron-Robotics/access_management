@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Commerce catalog policy tests
+principals:
+  catalog_cat: { id: cat, roles: ["catalog_manager", "employee"], attr: { tenant_id: tenant-a } }
+  bot_bea:     { id: bea, roles: ["agent_operator", "employee"],  attr: { tenant_id: tenant-a } }
+  atd_alex:
+    id: alex
+    roles: ["distributor_manager", "employee"]
+    attr: { tenant_id: tenant-a, distributors: ["ATD"] }
+  ntw_nina:
+    id: nina
+    roles: ["distributor_manager", "employee"]
+    attr: { tenant_id: tenant-a, distributors: ["NTW"] }
+
+resources:
+  validated:
+    id: c1
+    kind: "commerce:catalog"
+    attr: { tenant_id: tenant-a, distributor: ATD, fitment_validated: true }
+  unvalidated:
+    id: c2
+    kind: "commerce:catalog"
+    attr: { tenant_id: tenant-a, distributor: ATD, fitment_validated: false }
+
+tests:
+  - name: Unvalidated fitment cannot be published by anyone
+    input:
+      principals: [catalog_cat, bot_bea]
+      resources: [unvalidated]
+      actions: [publish_fitment]
+    expected:
+      - { principal: catalog_cat, resource: unvalidated, actions: { publish_fitment: EFFECT_DENY } }
+      - { principal: bot_bea,     resource: unvalidated, actions: { publish_fitment: EFFECT_DENY } }
+
+  - name: Validated fitment is publishable by the catalog manager, not the agent
+    input:
+      principals: [catalog_cat, bot_bea]
+      resources: [validated]
+      actions: [publish_fitment]
+    expected:
+      - { principal: catalog_cat, resource: validated, actions: { publish_fitment: EFFECT_ALLOW } }
+      - { principal: bot_bea,     resource: validated, actions: { publish_fitment: EFFECT_DENY } }
+
+  - name: Bulk import is scoped to the distributor you operate
+    input:
+      principals: [atd_alex, ntw_nina]
+      resources: [validated]
+      actions: [bulk_import]
+    expected:
+      - { principal: atd_alex, resource: validated, actions: { bulk_import: EFFECT_ALLOW } }
+      - { principal: ntw_nina, resource: validated, actions: { bulk_import: EFFECT_DENY } }
+
+  - name: The agent may read the catalog but not write it
+    input:
+      principals: [bot_bea]
+      resources: [validated]
+      actions: [search, update, delete]
+    expected:
+      - { principal: bot_bea, resource: validated, actions: { search: EFFECT_ALLOW, update: EFFECT_DENY, delete: EFFECT_DENY } }

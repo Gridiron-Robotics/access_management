@@ -1,0 +1,62 @@
+# Commerce -> Orders, including drop-ship dispatch to a distributor.
+#
+# Dispatching a drop-ship order is the action that commits money to a supplier
+# and cannot be un-sent once the distributor accepts it, so it is banded and
+# scoped to the distributor the caller actually operates.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "commerce:order"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view", "list"]
+      effect: EFFECT_ALLOW
+      roles: ["sales_rep", "support_agent", "warehouse_clerk", "accountant", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    - actions: ["create", "update"]
+      effect: EFFECT_ALLOW
+      roles: ["sales_rep", "support_agent", "agent_operator", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    # Cancelling before fulfilment is routine; after it is a returns problem.
+    - actions: ["cancel"]
+      effect: EFFECT_ALLOW
+      roles: ["support_agent", "support_manager", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.fulfilled != true
+
+    # Drop-ship dispatch: only for a distributor this caller operates, and only
+    # below the value band above which a human signs off.
+    - actions: ["dispatch_dropship"]
+      effect: EFFECT_ALLOW
+      derivedRoles: ["distributor_operator"]
+      condition:
+        match:
+          expr: request.resource.attr.order_total < 5000
+
+    - actions: ["dispatch_dropship"]
+      effect: EFFECT_ALLOW
+      roles: ["admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.order_total >= 5000
+              - expr: request.resource.attr.approved_by_human == true
+
+    # An agent may prepare a dispatch but not commit it.
+    - actions: ["dispatch_dropship"]
+      effect: EFFECT_DENY
+      roles: ["agent_operator"]
