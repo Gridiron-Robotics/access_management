@@ -9,7 +9,7 @@
 #   FAST=1 bash harden/verify.sh                   # quick deploy-readiness subset
 #   STAGES="policies kamal" bash harden/verify.sh  # run only these stages
 #
-# Stages: compile lint test vuln policies helm kamal docker
+# Stages: compile lint test vuln policies integration helm kamal docker
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -47,6 +47,15 @@ stage_test()     {
 }
 stage_vuln()     { have govulncheck || return 2; govulncheck ./...; }
 stage_policies() { have go || return 2; go run ./cmd/cerbos compile policies/; }
+# The Python integration layer (Contract-A MCP surface + PDP client) is ours,
+# not upstream. Its fail-closed behaviour — refuse to boot without a token,
+# deny when the PDP is unreachable, refuse a principal with no tenant — is only
+# provable by running these tests, so the judge runs them.
+stage_integration() {
+  have python3 || return 2
+  python3 -c 'import fastapi, pytest' >/dev/null 2>&1 || return 2
+  python3 -m pytest integration/tests -q
+}
 stage_helm()     { have helm || return 2; helm lint deploy/charts/cerbos; }
 stage_kamal()    {
   if have kamal; then kamal config
@@ -58,9 +67,9 @@ stage_docker()   { have docker || return 2; docker build -f deploy/kamal/Dockerf
 
 # ---- select & run --------------------------------------------------------
 if [[ "${FAST:-0}" == "1" ]]; then
-  STAGES="${STAGES:-policies kamal helm}"
+  STAGES="${STAGES:-policies integration kamal helm}"
 else
-  STAGES="${STAGES:-compile lint test vuln policies helm kamal}"
+  STAGES="${STAGES:-compile lint test vuln policies integration helm kamal}"
 fi
 
 for s in $STAGES; do
@@ -70,10 +79,14 @@ for s in $STAGES; do
     test)     run_stage test     stage_test     ;;
     vuln)     run_stage vuln     stage_vuln     ;;
     policies) run_stage policies stage_policies ;;
+    integration) run_stage integration stage_integration ;;
     helm)     run_stage helm     stage_helm     ;;
     kamal)    run_stage kamal    stage_kamal    ;;
     docker)   run_stage docker   stage_docker   ;;
-    *) printf '%sUnknown stage: %s%s\n' "$RED" "$s" "$RST" ;;
+    # A stage name the judge does not recognise is a FAILURE, not a notice.
+    # Silently continuing means a typo in STAGES quietly drops a check while
+    # the run still reports GREEN — the exact shape of a gate that lies.
+    *) printf '%sUnknown stage: %s%s\n' "$RED" "$s" "$RST"; FAIL+=("unknown-stage:$s") ;;
   esac
 done
 

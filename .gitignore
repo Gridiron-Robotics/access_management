@@ -41,7 +41,8 @@ unit.cover
 # access-management hardening loop (generated review output)
 harden/review-findings.json
 
-# Python bytecode (integration apps: cerbos_access, erp)
+# Python bytecode + test artifacts (integration/**)
 __pycache__/
 *.py[cod]
-
+.pytest_cache/
+.venv/

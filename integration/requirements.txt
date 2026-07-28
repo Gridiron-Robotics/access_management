@@ -1,0 +1,29 @@
+# Runtime + test dependencies for the Python integration layer (integration/**).
+#
+# These are OURS — the upstream Cerbos engine is Go and has no Python
+# dependencies. Nothing here is installed into, or imported by, the engine.
+#
+# Exact pins only (repo rule 3). A floating range here would let a fresh
+# install pull a different FastAPI/OTel major and silently change the
+# fail-closed behaviour these versions were verified against.
+
+# --- Contract-A MCP surface (integration/mcp/server.py) --------------------
+fastapi==0.104.1
+starlette==0.27.0
+uvicorn==0.24.0
+httpx==0.25.1
+
+# --- PDP client (integration/erp/cerbos_erp.py) ---------------------------
+requests==2.33.1
+
+# --- OpenObserve self-heal rail (integration/mcp/gridiron_otel.py) --------
+# The exporter ships ERROR records to the `access_management` stream, where
+# the estate alert fires on `level = error`.
+opentelemetry-api==1.42.1
+opentelemetry-sdk==1.42.1
+opentelemetry-exporter-otlp-proto-http==1.42.1
+opentelemetry-instrumentation-fastapi==0.63b1
+
+# --- tests ----------------------------------------------------------------
+pytest==7.4.3
+PyYAML==6.0.3
