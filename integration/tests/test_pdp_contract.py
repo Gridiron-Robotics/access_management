@@ -225,6 +225,29 @@ class TestExplanations:
         assert "human approval" in reason
         assert "approval gate" in reason
 
+    def test_a_bare_approval_flag_is_distinguished_from_no_approval(self):
+        # Not the same message: the caller BELIEVES it has an approval, so
+        # "route it through the approval gate" would send them to redo something
+        # they think they already did. The real fault is upstream — the
+        # enforcing service forwarded the flag without resolving the record.
+        reason = explain(
+            {"attr": {"tenant_id": "t"}},
+            {"attr": {"tenant_id": "t", "approved_by_human": True, "approval_ref": ""}},
+            allowed=False,
+        )
+        assert "approval_ref" in reason
+        assert "bare flag" in reason
+
+    def test_a_named_approval_is_not_blamed_for_the_denial(self):
+        # With a real ref, the approval is not the problem — do not send the
+        # caller to fix something that is already correct.
+        reason = explain(
+            {"attr": {"tenant_id": "t"}},
+            {"attr": {"tenant_id": "t", "approved_by_human": True, "approval_ref": "appr-1"}},
+            allowed=False,
+        )
+        assert "approval_ref" not in reason
+
     def test_an_over_band_amount_points_at_the_band(self):
         reason = explain(
             {"attr": {"tenant_id": "t"}},

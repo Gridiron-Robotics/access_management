@@ -7,6 +7,13 @@
 # Repricing is banded by how far the new price moves. A small automated
 # adjustment inside a rule's guardrails is routine; a large move is either a
 # pricing decision or a bug, and both deserve a human.
+#
+# "A recorded human approval" means BOTH `approved_by_human == true` AND a
+# non-empty `approval_ref` naming an ApprovalRequest in the middleware. The bare
+# boolean is unfalsifiable — anything that reaches the PDP can set it, and
+# afterwards there is no approver, timestamp, or chain to inspect. The ref makes
+# the claim point at a record that either exists and is APPROVED, or does not.
+# See integration/HITL_APPROVALS.md.
 ---
 apiVersion: api.cerbos.dev/v1
 resourcePolicy:
@@ -54,6 +61,7 @@ resourcePolicy:
             of:
               - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
               - expr: request.resource.attr.approved_by_human == true
+              - expr: size(request.resource.attr.approval_ref) > 0
 
     # Selling below the floor is a loss by construction. No role does this
     # without an explicit human decision — including admin.

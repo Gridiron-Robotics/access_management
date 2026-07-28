@@ -9,6 +9,13 @@
 #   resource.attr.method     "card" | "ach_debit" | "ach_credit" | "wire"
 #   resource.attr.amount     the amount being moved
 #   resource.attr.approved_by_human
+#
+# "A recorded human approval" means BOTH `approved_by_human == true` AND a
+# non-empty `approval_ref` naming an ApprovalRequest in the middleware. The bare
+# boolean is unfalsifiable — anything that reaches the PDP can set it, and
+# afterwards there is no approver, timestamp, or chain to inspect. The ref makes
+# the claim point at a record that either exists and is APPROVED, or does not.
+# See integration/HITL_APPROVALS.md.
 ---
 apiVersion: api.cerbos.dev/v1
 resourcePolicy:
@@ -59,6 +66,7 @@ resourcePolicy:
               - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
               - expr: request.resource.attr.method in ["ach_credit", "wire"]
               - expr: request.resource.attr.approved_by_human == true
+              - expr: size(request.resource.attr.approval_ref) > 0
 
     # No agent may move money out, ever.
     - actions: ["disburse"]

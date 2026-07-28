@@ -39,9 +39,29 @@ export CGO_ENABLED="${CGO_ENABLED:-0}"
 
 # ---- stages (return 0 pass, 1 fail, 2 skip) ------------------------------
 stage_compile()  { have go || return 2; go build ./...; }
-stage_lint()     { have golangci-lint || return 2; golangci-lint run --config=.golangci.yaml; }
+stage_lint()     {
+  have golangci-lint || return 2
+  # A golangci-lint built against an older Go than go.mod targets cannot load
+  # the config at all — it never lints a line. That is an uninstalled tool
+  # wearing a failure's clothes, so report it as SKIP: a FAIL here would say
+  # "the code is bad" when nothing was examined, and a green would be worse.
+  local out rc=0
+  out="$(golangci-lint run --config=.golangci.yaml 2>&1)" || rc=$?
+  printf '%s\n' "$out"
+  if [[ $rc -ne 0 ]] && grep -q "used to build golangci-lint is lower than the targeted Go version" <<<"$out"; then
+    printf 'golangci-lint is older than go.mod targets — nothing was linted.\n'
+    return 2
+  fi
+  return $rc
+}
 stage_test()     {
   have go || return 2
+  # Upstream's cerbosctl suites spin up containers via testcontainers. Without a
+  # Docker daemon they cannot run — again SKIP, not FAIL.
+  if ! docker info >/dev/null 2>&1; then
+    printf 'no Docker daemon: upstream testcontainers suites cannot run.\n'
+    return 2
+  fi
   if have gotestsum; then gotestsum -- -tags=tests,integration -count=1 ./...
   else go test -tags=tests,integration -count=1 ./...; fi
 }

@@ -14,6 +14,13 @@
 # Note what is NOT here: no rule lets any role refund an arbitrary amount
 # unconditionally. `admin` is bounded too. An unbounded refund permission is
 # indistinguishable from an unbounded withdrawal permission.
+#
+# "A recorded human approval" means BOTH `approved_by_human == true` AND a
+# non-empty `approval_ref` naming an ApprovalRequest in the middleware. The bare
+# boolean is unfalsifiable — anything that reaches the PDP can set it, and
+# afterwards there is no approver, timestamp, or chain to inspect. The ref makes
+# the claim point at a record that either exists and is APPROVED, or does not.
+# See integration/HITL_APPROVALS.md.
 ---
 apiVersion: api.cerbos.dev/v1
 resourcePolicy:
@@ -78,6 +85,7 @@ resourcePolicy:
               - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
               - expr: request.resource.attr.amount >= 10000
               - expr: request.resource.attr.approved_by_human == true
+              - expr: size(request.resource.attr.approval_ref) > 0
 
     # An autonomous agent may never issue a refund on its own authority,
     # whatever the amount. It proposes; a human issues.

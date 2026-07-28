@@ -10,7 +10,7 @@ principals:
 resources:
   in_window:      { id: m1, kind: "commerce:rma", attr: { tenant_id: tenant-a, within_return_window: true,  approved_by_human: false } }
   out_of_window:  { id: m2, kind: "commerce:rma", attr: { tenant_id: tenant-a, within_return_window: false, approved_by_human: false } }
-  out_ok:         { id: m3, kind: "commerce:rma", attr: { tenant_id: tenant-a, within_return_window: false, approved_by_human: true } }
+  out_ok:         { id: m3, kind: "commerce:rma", attr: { tenant_id: tenant-a, within_return_window: false, approved_by_human: true, approval_ref: appr-9001 } }
 
 tests:
   - name: In-window returns are routine; out-of-window ones are not

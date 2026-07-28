@@ -7,7 +7,7 @@
 Run:
     CERBOS_PDP_URL=http://cerbos:3592 \\
     ACCESS_MCP_TOKEN=<bearer> \\
-    uvicorn integration.mcp.server:app --port 8085
+    uvicorn --factory integration.mcp.server:build_default_app --port 8085
 
 AUTHENTICATION IS FAIL-CLOSED
 -----------------------------
@@ -84,16 +84,28 @@ def create_app(checker: Any = None, token: str | None = None) -> FastAPI:
         return Response(status_code=200)
 
     @app.get("/tools")
-    def tools(authorization: str | None = Header(default=None)) -> dict:
+    def tools(
+        server: str | None = None,
+        authorization: str | None = Header(default=None),
+    ) -> dict:
         # The catalog names every resource kind and action in the estate's
         # authorization model, so it is not public.
         _authenticate(authorization)
+
+        # The estate contract is `GET /tools?server=<name>`. Answering with our
+        # catalog regardless of which server was asked for would make a
+        # misrouted gateway look like it works, and the caller would bind tools
+        # it believes belong to something else.
+        if server and server != CONTRACT_SERVER_NAME:
+            return {"tools": []}
+
         return build_catalog()
 
     @app.post("/invoke")
     async def invoke(
         request: Request,
         authorization: str | None = Header(default=None),
+        x_tenant_id: str | None = Header(default=None),
     ) -> JSONResponse:
         _authenticate(authorization)
 
@@ -113,6 +125,21 @@ def create_app(checker: Any = None, token: str | None = None) -> FastAPI:
         arguments = body.get("arguments") or body.get("args") or {}
         if not isinstance(arguments, dict):
             return JSONResponse({"error": "'arguments' must be an object"}, status_code=422)
+
+        # The platform sets `X-Tenant-Id` on tenant-scoped invocations. It may
+        # only RESTATE the tenant already carried by the principal in the body —
+        # it must never be the thing that decides which tenant we answer for,
+        # because a header is spoofable and the principal is what the policies
+        # are written against. Disagreement is a 403, not a silent preference
+        # for one of the two.
+        if x_tenant_id:
+            principal = arguments.get("principal")
+            claimed = (principal or {}).get("attr", {}).get("tenant_id") if isinstance(principal, dict) else None
+            if claimed and claimed != x_tenant_id:
+                return JSONResponse(
+                    {"error": "X-Tenant-Id does not match principal.attr.tenant_id"},
+                    status_code=403,
+                )
 
         try:
             result = surface.invoke(tool, arguments)
@@ -142,12 +169,16 @@ def create_app(checker: Any = None, token: str | None = None) -> FastAPI:
     return app
 
 
-def _build_default_app() -> FastAPI:
+def build_default_app() -> FastAPI:
+    """Entrypoint for `uvicorn --factory integration.mcp.server:build_default_app`.
+
+    A factory rather than a module-level `app`, so an unconfigured deployment
+    dies with the RuntimeError that says WHY. Exporting `app = None` when the
+    token is unset made uvicorn report "not callable", which sends whoever is
+    on call looking for an import bug instead of a missing secret.
+    """
     try:
         return create_app()
     except RuntimeError as exc:
         print(f"FATAL: {exc}", file=sys.stderr)
         raise
-
-
-app = _build_default_app() if os.environ.get("ACCESS_MCP_TOKEN") else None

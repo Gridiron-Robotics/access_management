@@ -9,7 +9,7 @@ principals:
 resources:
   parcel:       { id: s1, kind: "commerce:shipment", attr: { tenant_id: tenant-a, cost: 22,   approved_by_human: false } }
   freight:      { id: s2, kind: "commerce:shipment", attr: { tenant_id: tenant-a, cost: 1800, approved_by_human: false } }
-  freight_ok:   { id: s3, kind: "commerce:shipment", attr: { tenant_id: tenant-a, cost: 1800, approved_by_human: true } }
+  freight_ok:   { id: s3, kind: "commerce:shipment", attr: { tenant_id: tenant-a, cost: 1800, approved_by_human: true, approval_ref: appr-9001 } }
 
 tests:
   - name: Routine parcel labels are open to the warehouse and the agent

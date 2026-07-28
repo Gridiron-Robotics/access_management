@@ -12,7 +12,8 @@ resources:
   ach_debit:   { id: p2, kind: "commerce:payment", attr: { tenant_id: tenant-a, method: ach_debit,  amount: 5000,  approved_by_human: false } }
   ach_big:     { id: p3, kind: "commerce:payment", attr: { tenant_id: tenant-a, method: ach_debit,  amount: 90000, approved_by_human: false } }
   ach_credit:  { id: p4, kind: "commerce:payment", attr: { tenant_id: tenant-a, method: ach_credit, amount: 100,   approved_by_human: false } }
-  ach_cred_ok: { id: p5, kind: "commerce:payment", attr: { tenant_id: tenant-a, method: ach_credit, amount: 100,   approved_by_human: true } }
+  ach_cred_ok: { id: p5, kind: "commerce:payment", attr: { tenant_id: tenant-a, method: ach_credit, amount: 100,   approved_by_human: true, approval_ref: appr-9001 } }
+  ach_cred_bare: { id: p6, kind: "commerce:payment", attr: { tenant_id: tenant-a, method: ach_credit, amount: 100, approved_by_human: true } }
 
 tests:
   - name: Card charges are routine for accountants and the agent
@@ -60,3 +61,14 @@ tests:
     expected:
       - { principal: admin_other, resource: card,        actions: { charge: EFFECT_DENY, void: EFFECT_DENY } }
       - { principal: admin_other, resource: ach_cred_ok, actions: { disburse: EFFECT_DENY, void: EFFECT_DENY } }
+
+  # Pushing money out is the highest-blast-radius action in the estate; an
+  # unfalsifiable boolean is not enough to authorize it.
+  - name: An outbound push needs a named approval, not just the flag
+    input:
+      principals: [finance_fred]
+      resources: [ach_cred_ok, ach_cred_bare]
+      actions: [disburse]
+    expected:
+      - { principal: finance_fred, resource: ach_cred_ok,   actions: { disburse: EFFECT_ALLOW } }
+      - { principal: finance_fred, resource: ach_cred_bare, actions: { disburse: EFFECT_DENY } }

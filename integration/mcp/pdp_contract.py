@@ -33,7 +33,6 @@ and it is in the permissive direction.
 
 from __future__ import annotations
 
-import os
 from typing import Any, Callable
 
 CONTRACT_SERVER_NAME = "access_management"
@@ -186,10 +185,26 @@ def explain(principal: dict, resource: dict, allowed: bool) -> str:
     if p_attr.get("tenant_id") != r_attr.get("tenant_id"):
         return "denied: resource belongs to a different tenant"
 
-    if r_attr.get("approved_by_human") is False or r_attr.get("approved") is False:
+    approved = r_attr.get("approved_by_human")
+    if approved is None:
+        approved = r_attr.get("approved")
+
+    if approved is False:
         return (
             "denied: this action requires a recorded human approval "
             "(route it through the approval gate, then retry)"
+        )
+
+    # Claimed approved, but nothing was named. Worth its own message: the caller
+    # believes it has an approval, so "route it through the approval gate" would
+    # send them to do something they think they already did. The real fault is
+    # upstream — the enforcing service passed the flag without resolving the
+    # ApprovalRequest it came from.
+    if approved is True and not r_attr.get("approval_ref"):
+        return (
+            "denied: the approval flag is set but no approval_ref names the "
+            "approval record (the enforcing service must resolve the "
+            "ApprovalRequest, not forward a bare flag)"
         )
 
     if "amount" in r_attr or "order_total" in r_attr or "cost" in r_attr:

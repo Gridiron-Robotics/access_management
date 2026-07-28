@@ -3,6 +3,13 @@
 # Dispatching a drop-ship order is the action that commits money to a supplier
 # and cannot be un-sent once the distributor accepts it, so it is banded and
 # scoped to the distributor the caller actually operates.
+#
+# "A recorded human approval" means BOTH `approved_by_human == true` AND a
+# non-empty `approval_ref` naming an ApprovalRequest in the middleware. The bare
+# boolean is unfalsifiable — anything that reaches the PDP can set it, and
+# afterwards there is no approver, timestamp, or chain to inspect. The ref makes
+# the claim point at a record that either exists and is APPROVED, or does not.
+# See integration/HITL_APPROVALS.md.
 ---
 apiVersion: api.cerbos.dev/v1
 resourcePolicy:
@@ -55,6 +62,7 @@ resourcePolicy:
               - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
               - expr: request.resource.attr.order_total >= 5000
               - expr: request.resource.attr.approved_by_human == true
+              - expr: size(request.resource.attr.approval_ref) > 0
 
     # An agent may prepare a dispatch but not commit it.
     - actions: ["dispatch_dropship"]

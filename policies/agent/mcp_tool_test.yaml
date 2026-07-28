@@ -59,6 +59,7 @@ resources:
       tool: delete_stock_item
       destructive: true
       approved: true
+      approval_ref: appr-9001
   out_of_scope_tool:
     id: t-4
     kind: "agent:mcp_tool"

@@ -35,7 +35,9 @@ resources:
   medium:     { id: r2, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 1500,  approved_by_human: false } }
   large:      { id: r3, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 8000,  approved_by_human: false } }
   huge:       { id: r4, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 25000, approved_by_human: false } }
-  huge_ok:    { id: r5, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 25000, approved_by_human: true } }
+  huge_ok:    { id: r5, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 25000, approved_by_human: true, approval_ref: appr-9001 } }
+  huge_bare:  { id: r6, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 25000, approved_by_human: true } }
+  huge_blank: { id: r7, kind: "commerce:refund", attr: { tenant_id: tenant-a, amount: 25000, approved_by_human: true, approval_ref: "" } }
 
 tests:
   - name: Support agent may issue only small refunds
@@ -94,3 +96,24 @@ tests:
     expected:
       - { principal: admin_other_tenant, resource: small,   actions: { view: EFFECT_DENY, issue: EFFECT_DENY, reverse: EFFECT_DENY } }
       - { principal: admin_other_tenant, resource: huge_ok, actions: { view: EFFECT_DENY, issue: EFFECT_DENY, reverse: EFFECT_DENY } }
+
+  # An approval that names no record is not an approval.
+  #
+  # `approved_by_human: true` on its own is a boolean the calling service set.
+  # Anything that can reach the PDP can set it, and afterwards there is nothing
+  # to look at: no approver, no timestamp, no chain. Requiring a REF means the
+  # claim points at an ApprovalRequest in the middleware that either exists and
+  # is APPROVED, or does not — which is checkable during an incident, and is
+  # what makes the refund band mean anything above 10,000.
+  - name: A bare approval flag with no approval record does not authorize a large refund
+    input:
+      principals: [finance_fred, admin_ada]
+      resources: [huge_ok, huge_bare, huge_blank]
+      actions: [issue]
+    expected:
+      - { principal: finance_fred, resource: huge_ok,    actions: { issue: EFFECT_ALLOW } }
+      - { principal: finance_fred, resource: huge_bare,  actions: { issue: EFFECT_DENY } }
+      - { principal: finance_fred, resource: huge_blank, actions: { issue: EFFECT_DENY } }
+      - { principal: admin_ada,    resource: huge_ok,    actions: { issue: EFFECT_ALLOW } }
+      - { principal: admin_ada,    resource: huge_bare,  actions: { issue: EFFECT_DENY } }
+      - { principal: admin_ada,    resource: huge_blank, actions: { issue: EFFECT_DENY } }

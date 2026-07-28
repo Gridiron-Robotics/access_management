@@ -1,7 +1,15 @@
 # Agent tool dispatch — the single authorization decision for the MCP gateway.
 #
 # WHY THIS LIVES HERE NOW
-# -----------------------
+# --------------------
+#
+# "A recorded human approval" means BOTH `approved_by_human == true` AND a
+# non-empty `approval_ref` naming an ApprovalRequest in the middleware. The bare
+# boolean is unfalsifiable — anything that reaches the PDP can set it, and
+# afterwards there is no approver, timestamp, or chain to inspect. The ref makes
+# the claim point at a record that either exists and is APPROVED, or does not.
+# See integration/HITL_APPROVALS.md.
+---
 # The middleware shipped its own `foundation/cerbos/policies/mcp_tool.yaml`, so
 # the estate had two authorization sources for the same decision and this repo
 # was not actually the PDP for the surface that matters most. That copy is
@@ -65,6 +73,7 @@ resourcePolicy:
               - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
               - expr: request.resource.attr.destructive == true
               - expr: request.resource.attr.approved == true
+              - expr: size(request.resource.attr.approval_ref) > 0
               - expr: request.resource.attr.server in request.principal.attr.tool_scopes
 
     # Explicit DENY for a destructive call with no approval.

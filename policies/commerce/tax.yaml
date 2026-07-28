@@ -3,6 +3,13 @@
 # Reading a tax rate is routine; changing nexus or a rate silently changes what
 # every future order collects, and filing a return is a statement to a
 # government. Those are separated deliberately.
+#
+# "A recorded human approval" means BOTH `approved_by_human == true` AND a
+# non-empty `approval_ref` naming an ApprovalRequest in the middleware. The bare
+# boolean is unfalsifiable — anything that reaches the PDP can set it, and
+# afterwards there is no approver, timestamp, or chain to inspect. The ref makes
+# the claim point at a record that either exists and is APPROVED, or does not.
+# See integration/HITL_APPROVALS.md.
 ---
 apiVersion: api.cerbos.dev/v1
 resourcePolicy:
@@ -37,6 +44,7 @@ resourcePolicy:
             of:
               - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
               - expr: request.resource.attr.approved_by_human == true
+              - expr: size(request.resource.attr.approval_ref) > 0
 
     - actions: ["file_return", "remit", "configure_nexus", "update_rate"]
       effect: EFFECT_DENY

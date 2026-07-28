@@ -8,7 +8,8 @@ principals:
 
 resources:
   cfg:    { id: t1, kind: "commerce:tax", attr: { tenant_id: tenant-a, approved_by_human: false } }
-  cfg_ok: { id: t2, kind: "commerce:tax", attr: { tenant_id: tenant-a, approved_by_human: true } }
+  cfg_ok: { id: t2, kind: "commerce:tax", attr: { tenant_id: tenant-a, approved_by_human: true, approval_ref: appr-9001 } }
+  cfg_bare: { id: t3, kind: "commerce:tax", attr: { tenant_id: tenant-a, approved_by_human: true } }
 
 tests:
   - name: The agent may quote tax but change nothing
@@ -52,3 +53,14 @@ tests:
     expected:
       - { principal: finance_fred, resource: cfg,    actions: { configure_nexus: EFFECT_ALLOW, file_return: EFFECT_DENY, remit: EFFECT_DENY } }
       - { principal: finance_fred, resource: cfg_ok, actions: { configure_nexus: EFFECT_ALLOW, file_return: EFFECT_ALLOW, remit: EFFECT_ALLOW } }
+
+  # A filing is a signed statement to a tax authority. The human who signed it
+  # has to be identifiable afterwards.
+  - name: Filing needs a named approval, not just the flag
+    input:
+      principals: [finance_fred]
+      resources: [cfg_ok, cfg_bare]
+      actions: [file_return, remit]
+    expected:
+      - { principal: finance_fred, resource: cfg_ok,   actions: { file_return: EFFECT_ALLOW, remit: EFFECT_ALLOW } }
+      - { principal: finance_fred, resource: cfg_bare, actions: { file_return: EFFECT_DENY,  remit: EFFECT_DENY } }

@@ -17,7 +17,11 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from integration.mcp.server import SERVICE_NAME, create_app  # noqa: E402
+from integration.mcp.server import (  # noqa: E402
+    SERVICE_NAME,
+    build_default_app,
+    create_app,
+)
 
 TOKEN = "test-token"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
@@ -62,6 +66,23 @@ class TestBootPosture:
     def test_starts_when_a_token_is_configured(self, monkeypatch):
         monkeypatch.setenv("ACCESS_MCP_TOKEN", "configured")
         assert create_app(checker=allowing_checker()) is not None
+
+    def test_the_container_entrypoint_also_refuses(self, monkeypatch):
+        """
+        The Dockerfile runs `uvicorn --factory ...:build_default_app`, so this
+        function is the container's only boot guard. A previous shape exported
+        `app = None` when the token was unset, which uvicorn reported as "not
+        callable" — sending whoever is on call after an import bug instead of a
+        missing secret.
+        """
+        monkeypatch.delenv("ACCESS_MCP_TOKEN", raising=False)
+
+        with pytest.raises(RuntimeError, match="will not start unauthenticated"):
+            build_default_app()
+
+    def test_the_container_entrypoint_builds_when_configured(self, monkeypatch):
+        monkeypatch.setenv("ACCESS_MCP_TOKEN", "configured")
+        assert build_default_app() is not None
 
 
 class TestAuthentication:
@@ -111,6 +132,18 @@ class TestContractShape:
         assert response.status_code == 200
         assert response.json()["result"] == {"allowed": True}
 
+    def test_the_catalog_answers_a_server_scoped_discovery(self, client):
+        # The estate contract is `GET /tools?server=<name>`.
+        body = client.get("/tools?server=access_management", headers=AUTH).json()
+        assert len(body["tools"]) == 3
+
+    def test_the_catalog_is_empty_for_a_different_server(self, client):
+        # Answering with our catalog regardless of what was asked for would make
+        # a misrouted gateway look like it works, and the caller would bind
+        # tools it believes belong to something else.
+        body = client.get("/tools?server=inventree", headers=AUTH).json()
+        assert body["tools"] == []
+
     def test_a_request_for_another_server_is_404(self, client):
         response = client.post(
             "/invoke",
@@ -150,6 +183,52 @@ class TestContractShape:
         )
         assert response.status_code == 422
         assert "tenant_id" in response.json()["error"]
+
+
+class TestTenantHeader:
+    """
+    The platform sets `X-Tenant-Id` on tenant-scoped invocations. The estate
+    rule is that it may only RESTATE the principal's tenant — a header is
+    spoofable, the principal is what the policies are written against.
+    """
+
+    def test_a_matching_header_is_accepted(self, client):
+        response = client.post(
+            "/invoke",
+            headers={**AUTH, "X-Tenant-Id": "tenant-a"},
+            json={
+                "tool": "check_access",
+                "arguments": {"principal": PRINCIPAL, "action": "issue", "resource": RESOURCE},
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["result"] == {"allowed": True}
+
+    def test_a_mismatched_header_is_403_not_a_silent_preference(self, client):
+        # If we quietly preferred either side, a caller who can set the header
+        # could ask questions as another tenant, or a compromised principal
+        # could hide behind a benign header.
+        response = client.post(
+            "/invoke",
+            headers={**AUTH, "X-Tenant-Id": "tenant-b"},
+            json={
+                "tool": "check_access",
+                "arguments": {"principal": PRINCIPAL, "action": "issue", "resource": RESOURCE},
+            },
+        )
+        assert response.status_code == 403
+        assert "allowed" not in response.json()
+
+    def test_no_header_leaves_the_principal_authoritative(self, client):
+        response = client.post(
+            "/invoke",
+            headers=AUTH,
+            json={
+                "tool": "check_access",
+                "arguments": {"principal": PRINCIPAL, "action": "issue", "resource": RESOURCE},
+            },
+        )
+        assert response.status_code == 200
 
 
 class TestSelfHealRail:

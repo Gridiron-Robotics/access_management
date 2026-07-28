@@ -30,7 +30,7 @@ resources:
   below_floor_ok:
     id: l4
     kind: "commerce:marketplace_listing"
-    attr: { tenant_id: tenant-a, channel: amazon, new_price: 80, floor_price: 100, change_percent: 20, approved_by_human: true }
+    attr: { tenant_id: tenant-a, channel: amazon, new_price: 80, floor_price: 100, change_percent: 20, approved_by_human: true, approval_ref: appr-9001 }
 
 tests:
   - name: A channel manager publishes only on their own channel
