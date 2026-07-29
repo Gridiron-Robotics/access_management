@@ -27,8 +27,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install the tools the gate needs
+        shell: bash
+        run: |
+          # Without this, a missing tool SKIPs its stage — and a SKIP that
+          # nobody notices is a check that stopped existing.
+          bash harden/setup.sh || echo "setup reported failures; REQUIRE_STAGES below will catch anything that matters"
+
       - name: Run the repo gate
         shell: bash
+        env:
+          # A SKIP is honest on a developer's laptop; on the runner it is a
+          # hole. Every stage named here must actually RUN — if the Docker
+          # daemon is down or vuln.go.dev is unreachable, this build goes red
+          # rather than reporting a green that proved nothing.
+          REQUIRE_STAGES: "compile lint test vuln policies integration helm kamal"
         run: |
           set -euo pipefail
           # First gate script that exists wins (matches gridiron-ci.sh).
