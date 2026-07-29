@@ -1,0 +1,57 @@
+# Commerce -> Shipping.
+#
+# Buying a label spends money with a carrier, so it is bounded; voiding one
+# reclaims it and is safe. Tires ship as freight often enough that the
+# high-value band is real rather than theoretical.
+#
+# "A recorded human approval" means BOTH `approved_by_human == true` AND a
+# non-empty `approval_ref` naming an ApprovalRequest in the middleware. The bare
+# boolean is unfalsifiable — anything that reaches the PDP can set it, and
+# afterwards there is no approver, timestamp, or chain to inspect. The ref makes
+# the claim point at a record that either exists and is APPROVED, or does not.
+# See integration/HITL_APPROVALS.md.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "commerce:shipment"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    - actions: ["view", "list", "track"]
+      effect: EFFECT_ALLOW
+      roles: ["support_agent", "warehouse_clerk", "sales_rep", "agent_operator", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    - actions: ["buy_label"]
+      effect: EFFECT_ALLOW
+      roles: ["warehouse_clerk", "warehouse_manager", "agent_operator", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.cost < 500
+
+    # Freight and oversized shipments cost real money per mistake.
+    - actions: ["buy_label"]
+      effect: EFFECT_ALLOW
+      roles: ["warehouse_manager", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.cost >= 500
+              - expr: request.resource.attr.approved_by_human == true
+              - expr: size(request.resource.attr.approval_ref) > 0
+
+    # Voiding returns money; it needs no band.
+    - actions: ["void_label"]
+      effect: EFFECT_ALLOW
+      roles: ["warehouse_clerk", "warehouse_manager", "admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id

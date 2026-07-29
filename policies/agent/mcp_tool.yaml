@@ -1,0 +1,102 @@
+# Agent tool dispatch — the single authorization decision for the MCP gateway.
+#
+# WHY THIS LIVES HERE NOW
+# --------------------
+#
+# "A recorded human approval" means BOTH `approved_by_human == true` AND a
+# non-empty `approval_ref` naming an ApprovalRequest in the middleware. The bare
+# boolean is unfalsifiable — anything that reaches the PDP can set it, and
+# afterwards there is no approver, timestamp, or chain to inspect. The ref makes
+# the claim point at a record that either exists and is APPROVED, or does not.
+# See integration/HITL_APPROVALS.md.
+---
+# The middleware shipped its own `foundation/cerbos/policies/mcp_tool.yaml`, so
+# the estate had two authorization sources for the same decision and this repo
+# was not actually the PDP for the surface that matters most. That copy is
+# superseded by this one.
+#
+# It also had a hole worth stating plainly, because it is the reason this is not
+# a straight copy: the tenant check was attached ONLY to the STAFF/ADMIN
+# `dispatch` rule. The `actions: ["*"]` ADMIN rule carried no tenant condition
+# at all, so an administrator of tenant A could dispatch any tool action against
+# tenant B's resources. Tenancy is now enforced on every rule, via the shared
+# `same_tenant` derived role — an admin is an admin OF A TENANT, not of the
+# estate.
+#
+# The gateway sets:
+#   resource.attr.tenant_id      the tenant the CALL targets
+#   resource.attr.server         the MCP server ("inventree", "bigcapital", …)
+#   resource.attr.tool           the tool name
+#   resource.attr.destructive    the tool's destructiveHint
+#   resource.attr.approved       true once a human approved this specific call
+#   principal.attr.tenant_id     the tenant the CALLER belongs to
+#   principal.attr.tool_scopes   server names this caller may reach
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "agent:mcp_tool"
+  version: "default"
+  importDerivedRoles:
+    - common_erp_roles
+  rules:
+    # Read-only discovery. Listing the catalogue reveals tool names and
+    # schemas, so it is still tenant-scoped, but it needs no elevated role.
+    - actions: ["list", "describe"]
+      effect: EFFECT_ALLOW
+      derivedRoles: ["same_tenant"]
+
+    # Non-destructive dispatch, restricted to the servers this caller may reach.
+    # `tool_scopes` is what stops an agent with a legitimate reason to read
+    # inventory from also reaching the accounting or payments servers.
+    - actions: ["dispatch"]
+      effect: EFFECT_ALLOW
+      roles: ["agent_operator", "staff"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.destructive == false
+              - expr: request.resource.attr.server in request.principal.attr.tool_scopes
+
+    # Destructive dispatch requires BOTH the elevated role AND a recorded human
+    # approval for this specific call. The approval is a resource attribute the
+    # gateway sets after the HITL checkpoint clears — so "the agent decided it
+    # was fine" can never satisfy this rule on its own.
+    - actions: ["dispatch"]
+      effect: EFFECT_ALLOW
+      roles: ["agent_supervisor", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.destructive == true
+              - expr: request.resource.attr.approved == true
+              - expr: size(request.resource.attr.approval_ref) > 0
+              - expr: request.resource.attr.server in request.principal.attr.tool_scopes
+
+    # Explicit DENY for a destructive call with no approval.
+    #
+    # Cerbos is deny-by-default, so this changes no outcome — it exists so the
+    # rule is visible in the policy and covered by a test. The failure being
+    # guarded against is someone later adding a broad ALLOW above and silently
+    # removing the approval requirement; this rule makes that a test failure
+    # rather than a discovery in production.
+    - actions: ["dispatch"]
+      effect: EFFECT_DENY
+      roles: ["agent_operator", "agent_supervisor", "staff", "admin"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.destructive == true
+              - expr: request.resource.attr.approved != true
+
+    # Administering the gateway itself (registering servers, editing scopes).
+    - actions: ["administer"]
+      effect: EFFECT_ALLOW
+      roles: ["admin"]
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id

@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+---
+name: Commerce order policy tests
+principals:
+  atd_alex:
+    id: alex
+    roles: ["distributor_manager", "employee"]
+    attr: { tenant_id: tenant-a, distributors: ["ATD"] }
+  ntw_nina:
+    id: nina
+    roles: ["distributor_manager", "employee"]
+    attr: { tenant_id: tenant-a, distributors: ["NTW"] }
+  bot_bea:   { id: bea, roles: ["agent_operator", "employee"], attr: { tenant_id: tenant-a } }
+  admin_ada: { id: ada, roles: ["admin", "employee"],          attr: { tenant_id: tenant-a } }
+  support_sue: { id: sue, roles: ["support_agent", "employee"], attr: { tenant_id: tenant-a } }
+
+resources:
+  atd_small:
+    id: o1
+    kind: "commerce:order"
+    attr: { tenant_id: tenant-a, distributor: ATD, order_total: 900, fulfilled: false, approved_by_human: false }
+  atd_large:
+    id: o2
+    kind: "commerce:order"
+    attr: { tenant_id: tenant-a, distributor: ATD, order_total: 12000, fulfilled: false, approved_by_human: false }
+  atd_large_ok:
+    id: o3
+    kind: "commerce:order"
+    attr: { tenant_id: tenant-a, distributor: ATD, order_total: 12000, fulfilled: false, approved_by_human: true, approval_ref: appr-9001 }
+  fulfilled:
+    id: o4
+    kind: "commerce:order"
+    attr: { tenant_id: tenant-a, distributor: ATD, order_total: 900, fulfilled: true, approved_by_human: false }
+
+tests:
+  - name: Drop-ship dispatch is scoped to the distributor you operate
+    input:
+      principals: [atd_alex, ntw_nina]
+      resources: [atd_small]
+      actions: [dispatch_dropship]
+    expected:
+      - { principal: atd_alex,  resource: atd_small, actions: { dispatch_dropship: EFFECT_ALLOW } }
+      - { principal: ntw_nina,  resource: atd_small, actions: { dispatch_dropship: EFFECT_DENY } }
+
+  - name: A high-value dispatch needs a human, even for the right operator
+    input:
+      principals: [atd_alex, admin_ada]
+      resources: [atd_large, atd_large_ok]
+      actions: [dispatch_dropship]
+    expected:
+      - { principal: atd_alex,  resource: atd_large,    actions: { dispatch_dropship: EFFECT_DENY } }
+      - { principal: admin_ada, resource: atd_large,    actions: { dispatch_dropship: EFFECT_DENY } }
+      - { principal: admin_ada, resource: atd_large_ok, actions: { dispatch_dropship: EFFECT_ALLOW } }
+
+  - name: The agent may prepare an order but never commit the dispatch
+    input:
+      principals: [bot_bea]
+      resources: [atd_small, atd_large_ok]
+      actions: [create, dispatch_dropship]
+    expected:
+      - { principal: bot_bea, resource: atd_small,    actions: { create: EFFECT_ALLOW, dispatch_dropship: EFFECT_DENY } }
+      - { principal: bot_bea, resource: atd_large_ok, actions: { create: EFFECT_ALLOW, dispatch_dropship: EFFECT_DENY } }
+
+  - name: Cancelling is allowed before fulfilment and denied after
+    input:
+      principals: [support_sue]
+      resources: [atd_small, fulfilled]
+      actions: [cancel]
+    expected:
+      - { principal: support_sue, resource: atd_small, actions: { cancel: EFFECT_ALLOW } }
+      - { principal: support_sue, resource: fulfilled, actions: { cancel: EFFECT_DENY } }

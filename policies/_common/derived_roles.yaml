@@ -23,3 +23,48 @@ derivedRoles:
       condition:
         match:
           expr: request.resource.attr.department == request.principal.attr.department
+
+    # ---------------------------------------------------------------------
+    # Tenancy and commerce scoping.
+    #
+    # Everything above answers "is this your record?". These answer "is this
+    # your *tenant*, your *channel*, your *distributor*?" — the questions the
+    # commerce and agent-dispatch policies below turn on.
+    #
+    # They are derived roles rather than inline conditions so that every
+    # resource policy expresses tenancy the same way. A per-policy `expr` that
+    # someone forgets to copy is exactly how a cross-tenant hole opens.
+    # ---------------------------------------------------------------------
+
+    # The record belongs to the caller's tenant. REQUIRED on every commerce
+    # resource — including for admins, who are admins OF A TENANT, not of the
+    # estate.
+    - name: same_tenant
+      parentRoles:
+        - employee
+      condition:
+        match:
+          expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+
+    # The caller is responsible for the sales channel this record belongs to
+    # (amazon / walmart / ebay / storefront / wholesale).
+    - name: channel_operator
+      parentRoles:
+        - channel_manager
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.channel in request.principal.attr.channels
+
+    # The caller is responsible for this distributor's feed / drop-ship flow.
+    - name: distributor_operator
+      parentRoles:
+        - distributor_manager
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.distributor in request.principal.attr.distributors

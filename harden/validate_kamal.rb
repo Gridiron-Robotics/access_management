@@ -51,6 +51,31 @@ else
   errors << "missing Gemfile pinning kamal 2.11.0"
 end
 
+# The Contract-A MCP sidecar (optional accessory). If it is declared, it must be
+# declared safely: an unpinned image is an unreproducible deploy, and the bearer
+# that guards the estate's authorization model must never sit in `env.clear`
+# (Kamal writes clear env into the container's inspectable config).
+mcp = cfg.dig("accessories", "mcp")
+if mcp
+  mcp_image = mcp["image"].to_s
+  if mcp_image.empty?
+    errors << "accessories.mcp.image not set"
+  elsif !mcp_image.include?(":") || mcp_image.end_with?(":latest")
+    errors << "accessories.mcp.image must be pinned to an exact tag (never :latest): #{mcp_image}"
+  end
+
+  mcp_secrets = mcp.dig("env", "secret") || []
+  errors << "accessories.mcp env.secret missing ACCESS_MCP_TOKEN" unless mcp_secrets.include?("ACCESS_MCP_TOKEN")
+
+  mcp_clear = mcp.dig("env", "clear") || {}
+  if mcp_clear.key?("ACCESS_MCP_TOKEN")
+    errors << "ACCESS_MCP_TOKEN must be in accessories.mcp env.secret, never env.clear"
+  end
+
+  mcp_dockerfile = "deploy/mcp/Dockerfile"
+  errors << "missing #{mcp_dockerfile} (builds accessories.mcp)" unless File.exist?(mcp_dockerfile)
+end
+
 # Hub mode (optional): if the destination overlay exists, sanity-check it.
 hub_overlay = "config/deploy.hub.yml"
 if File.exist?(hub_overlay)

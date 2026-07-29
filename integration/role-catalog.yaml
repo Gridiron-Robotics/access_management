@@ -81,6 +81,73 @@ modules:
         label: Supervisor
         description: Also start/complete on any line and cancel.
 
+  - key: commerce
+    label: Commerce / Selling
+    roles:
+      - key: sales_rep
+        label: Sales Rep
+        description: View and create orders; view listings.
+      - key: support_agent
+        label: Support Agent
+        description: Create RMAs, cancel unfulfilled orders, issue refunds under $250.
+      - key: support_manager
+        label: Support Manager
+        description: Also authorize out-of-window returns and refunds under $2,500.
+
+  - key: channels
+    label: Sales Channels
+    description: >-
+      Grant a channel role together with the `channels` attribute below. A
+      channel manager may only publish and edit listings on the channels they
+      are actually assigned.
+    roles:
+      - key: channel_manager
+        label: Channel Manager
+        description: Publish/edit marketplace listings on their assigned channels.
+
+  - key: pricing
+    label: Pricing
+    roles:
+      - key: pricing_analyst
+        label: Pricing Analyst
+        description: Reprice within guardrails (at or above floor, moves of 15% or less).
+      - key: pricing_manager
+        label: Pricing Manager
+        description: Approve repricing that breaks the guardrails, including below-floor.
+
+  - key: distribution
+    label: Distributors / Drop-ship
+    description: >-
+      Grant together with the `distributors` attribute below. A distributor
+      manager may only dispatch drop-ship orders and bulk-import feeds for the
+      distributors they are assigned.
+    roles:
+      - key: distributor_manager
+        label: Distributor Manager
+        description: Dispatch drop-ship orders under $5,000; bulk-import that distributor's feed.
+
+  - key: catalog
+    label: Catalog / Fitment
+    roles:
+      - key: catalog_manager
+        label: Catalog Manager
+        description: Edit catalog records; publish fitment once it has been validated.
+
+  - key: agent
+    label: AI Agent Operation
+    description: >-
+      These govern what the autonomous agent may do on its own authority. Note
+      that NO agent role can issue a refund, disburse funds, file a tax return
+      or commit a drop-ship dispatch — those require a human every time.
+    roles:
+      - key: agent_operator
+        label: Agent Operator (service account)
+        description: Dispatch non-destructive MCP tools within its tool scopes.
+      - key: agent_supervisor
+        label: Agent Supervisor
+        description: Dispatch destructive MCP tools, but only with a recorded human approval.
+
+
 # Attributes the HRMS/ERP must supply per user (NOT toggled on the page; read at
 # request time). These drive the conditional rules (e.g. same-location adjust).
 attributes:
@@ -93,3 +160,24 @@ attributes:
   - key: line
     label: Production line
     source: ERP/Ops
+  - key: tenant_id
+    label: Tenant
+    source: ERP
+    description: >-
+      REQUIRED on every principal. Every commerce and agent policy is scoped by
+      it, including for administrators — an admin is an admin OF A TENANT, not
+      of the estate. A principal with no tenant_id is denied, not defaulted.
+  - key: channels
+    label: Assigned sales channels
+    source: ERP/Ops
+    description: List, e.g. ["amazon", "ebay"]. Read by the channel_manager role.
+  - key: distributors
+    label: Assigned distributors
+    source: ERP/Ops
+    description: List, e.g. ["ATD", "NTW"]. Read by the distributor_manager role.
+  - key: tool_scopes
+    label: MCP servers this principal may reach
+    source: ERP/Ops
+    description: >-
+      List of MCP server names. This is what stops an agent with a legitimate
+      reason to read inventory from also reaching the payments server.

@@ -51,3 +51,30 @@ env:
 # Give the PDP time to boot and pass its healthcheck before Kamal rolls back.
 deploy_timeout: 30
 drain_timeout: 30
+
+# The Contract-A MCP surface (integration/mcp/server.py) — how the agent brain
+# ASKS this PDP "may this principal do that?" before acting. A separate image
+# from the PDP on purpose: the PDP is upstream Cerbos (Go) and is not ours to
+# modify, so the sidecar can be restarted or removed without touching the engine
+# every enforcing service depends on.
+#
+# Build it separately (Kamal accessories take a prebuilt image):
+#   docker build -f deploy/mcp/Dockerfile -t your-org/access-management-mcp:<sha> .
+#   docker push  your-org/access-management-mcp:<sha>
+#
+# ACCESS_MCP_TOKEN has no default anywhere — the service refuses to start
+# without it, so an unconfigured deploy fails loudly instead of serving the
+# estate's authorization model unauthenticated.
+accessories:
+  mcp:
+    image: your-org/access-management-mcp:0.1.0   # <-- CHANGE (exact tag, never :latest)
+    host: 203.0.113.10                            # <-- CHANGE (same host as the PDP)
+    port: "8085:8085"
+    env:
+      clear:
+        CERBOS_PDP_URL: http://access-management:3592
+        OTEL_SERVICE_NAME: access_management
+        # OTEL_EXPORTER_OTLP_ENDPOINT: http://openobserve:5080/api/default
+      secret:
+        - ACCESS_MCP_TOKEN
+        - OTEL_EXPORTER_OTLP_HEADERS
