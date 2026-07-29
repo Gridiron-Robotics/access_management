@@ -126,3 +126,56 @@ denied: this action requires a recorded human approval
 That is the string an agent should act on — open an approval and stop, rather
 than retrying the same call or attempting a smaller variant that slips under a
 band. See `integration/CONTRACT.md`.
+
+---
+
+## Migrating an existing caller
+
+The `approval_ref` requirement is a **behaviour change**. A service that today
+sends a bare `approved_by_human: true` will start being denied on the high
+bands. That is the intent — the bare flag never authorized anything, it only
+looked like it did — but it needs sequencing, not a flag day.
+
+### The reference implementation
+
+`erp_django_middleware` ships the resolver every caller should use:
+
+```python
+from django_middleware.approvals.cerbos_attrs import approval_attrs
+
+attrs = {
+    "tenant_id": tenant_id,
+    "amount": amount,
+    **approval_attrs(tenant_id, approval_id, resource_id=refund_id),
+}
+```
+
+It reads the stored `ApprovalRequest`, never request input, and returns
+`{"approved_by_human": False, "approval_ref": ""}` on **every** failure path —
+missing id, wrong tenant, not-yet-APPROVED, wrong resource, or a database
+error. A bug in a caller therefore degrades to *denied*, never to *allowed*.
+
+For `agent:mcp_tool` dispatch use `dispatch_approval_attrs(tenant, tool, token)`,
+which resolves the single-use `DispatchApproval` row. It **reads without
+spending** — the atomic consume belongs at the dispatch site, and burning the
+token during an authorization check (including checks that then deny) would
+force the human to approve again.
+
+Both are covered by
+`django_middleware/tests/unit/approvals/test_cerbos_attrs.py` and
+`.../mcp_gateway/test_cerbos_pep.py::ApprovalAttributesSentToPdpTests`, whose
+mutation check is: replace the resolver with a hard-coded `true` and the tests
+go red.
+
+### Rollout order
+
+1. **Update callers first.** Every service that hits an approval-gated policy
+   adopts the resolver. Until it does, its high-band operations are denied — so
+   deploy this before, or together with, the policy change.
+2. **Watch for the denial.** `explain_denial` distinguishes the two cases:
+   *no approval* ("route it through the approval gate") from *approval not
+   named* ("the enforcing service must resolve the ApprovalRequest, not forward
+   a bare flag"). The second string means a caller was missed.
+3. **Low bands are unaffected.** Only the rules listed at the top of this
+   document require an approval at all. A 100-dollar refund never touched
+   `approved_by_human` and does not now.
