@@ -277,6 +277,174 @@
         "null"
       ]
     },
+    "mcp": {
+      "additionalProperties": false,
+      "description": "Contract-A MCP sidecar (integration/mcp/server.py). A separate Deployment + Service from the Cerbos PDP, disabled by default so a default render stays byte-identical to upstream.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Render the MCP sidecar Deployment + Service.",
+          "required": [],
+          "title": "enabled",
+          "type": "boolean"
+        },
+        "env": {
+          "description": "Extra environment variables for the sidecar (e.g. OTEL_*).",
+          "items": {
+            "additionalProperties": true,
+            "required": [],
+            "type": "object"
+          },
+          "required": [],
+          "title": "env",
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "existingSecret": {
+          "default": "",
+          "description": "Name of a pre-created Secret holding ACCESS_MCP_TOKEN. Required when enabled; the chart fails to render without it. No token value ever lives in these values.",
+          "required": [],
+          "title": "existingSecret",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image": {
+          "additionalProperties": false,
+          "description": "Sidecar image details (built from deploy/mcp/Dockerfile). Pin an exact tag.",
+          "properties": {
+            "digest": {
+              "default": "",
+              "description": "Image digest. Takes precedence over tag if set.",
+              "required": [],
+              "title": "digest",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pullPolicy": {
+              "default": "IfNotPresent",
+              "description": "Image pull policy.",
+              "enum": [
+                "IfNotPresent",
+                "Always"
+              ],
+              "required": [],
+              "title": "pullPolicy"
+            },
+            "repository": {
+              "default": "",
+              "description": "Container image name without the tag.",
+              "required": [],
+              "title": "repository",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tag": {
+              "default": "",
+              "description": "Image tag.",
+              "required": [],
+              "title": "tag",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [],
+          "title": "image"
+        },
+        "podSecurityContext": {
+          "additionalProperties": true,
+          "description": "Security context for the sidecar pod.",
+          "required": [],
+          "title": "podSecurityContext",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "port": {
+          "default": 8085,
+          "description": "Port the MCP surface listens on (Contract-A fixes this at 8085).",
+          "required": [],
+          "title": "port",
+          "type": "integer"
+        },
+        "replicaCount": {
+          "default": 1,
+          "description": "Number of sidecar pods.",
+          "required": [],
+          "title": "replicaCount",
+          "type": "integer"
+        },
+        "resources": {
+          "additionalProperties": true,
+          "description": "Resource limits for the sidecar container.",
+          "required": [],
+          "title": "resources",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "securityContext": {
+          "additionalProperties": true,
+          "description": "Security context for the sidecar container.",
+          "required": [],
+          "title": "securityContext",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "service": {
+          "additionalProperties": false,
+          "description": "Service settings for the sidecar.",
+          "properties": {
+            "name": {
+              "default": "access-management-mcp",
+              "description": "Service name. The agent platform binds this exact DNS name (langgraph-agents/specialists/registry.py), so keep the default unless the consumer is updated too.",
+              "required": [],
+              "title": "name",
+              "type": "string"
+            },
+            "type": {
+              "default": "ClusterIP",
+              "description": "Service type.",
+              "enum": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer"
+              ],
+              "required": [],
+              "title": "type"
+            }
+          },
+          "required": [],
+          "title": "service"
+        },
+        "tokenSecretKey": {
+          "default": "ACCESS_MCP_TOKEN",
+          "description": "Key within existingSecret that holds the bearer token.",
+          "required": [],
+          "title": "tokenSecretKey",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [],
+      "title": "mcp",
+      "type": "object"
+    },
     "nameOverride": {
       "default": "",
       "required": [],

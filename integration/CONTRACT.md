@@ -146,6 +146,18 @@ happens to own the resource.
 GATEWAY_TOKENS={"http://access-management-mcp:8085":"<ACCESS_MCP_TOKEN>"}
 ```
 
+Stand the producer up next to the PDP (the consumer wiring above resolves the
+`access-management-mcp` container by name on `erp_shared_network`):
+
+```
+export ACCESS_MCP_TOKEN=<bearer>
+docker compose -f docker-compose.mcp.yml up -d
+```
+
+On Kubernetes it ships from the same Helm chart with `mcp.enabled=true`
+(`deploy/charts/cerbos/values-mcp.yaml`); on plain Docker hosts it is the
+`accessories.mcp` block in `config/deploy.yml`.
+
 Discovery is best-effort on the consumer side: if this gateway is unreachable at
 factory time the specialist still boots with its own tools. That degradation is
 about *tool discovery*, not about decisions — an enforcing service still asks

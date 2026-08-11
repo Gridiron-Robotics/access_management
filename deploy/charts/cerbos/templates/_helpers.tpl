@@ -173,6 +173,41 @@ The image reference to use in pods
 {{- end }}
 
 {{/*
+The MCP sidecar fully qualified name
+*/}}
+{{- define "cerbos.mcp.fullname" -}}
+{{- printf "%s-mcp" (include "cerbos.fullname" .) -}}
+{{- end }}
+
+{{/*
+MCP sidecar selector labels.
+
+A DISTINCT `app.kubernetes.io/name` (…-mcp), not just a component label, so the
+sidecar pods are never a superset of the PDP Service's selector — otherwise the
+PDP Service (which selects on name+instance only) would front the MCP pods,
+which expose no `http` port. The `component: mcp` label keeps the reverse
+direction distinct too.
+*/}}
+{{- define "cerbos.mcp.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "cerbos.name" . }}-mcp
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/component: mcp
+{{- end }}
+
+{{/*
+The MCP sidecar image reference (digest takes precedence over tag)
+*/}}
+{{- define "cerbos.mcp.image" -}}
+"{{ .Values.mcp.image.repository }}
+{{- with .Values.mcp.image.digest -}}
+@{{ . }}
+{{- else -}}
+:{{ .Values.mcp.image.tag | default .Chart.AppVersion }}
+{{- end -}}
+"
+{{- end }}
+
+{{/*
 Topology spread constraints with label selector injected
 */}}
 {{- define "cerbos.topologySpreadConstraints" -}}

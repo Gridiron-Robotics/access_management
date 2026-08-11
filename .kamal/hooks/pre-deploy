@@ -6,6 +6,19 @@
 # re-verify here so a broken access-rule set can never reach production.
 set -euo pipefail
 
+# Refuse to deploy while config/deploy.yml still carries `<-- CHANGE` placeholder
+# markers on real (non-comment) config lines — an unfilled image/host/registry
+# would otherwise fail obscurely at `docker pull` or secret resolution. This
+# belongs at deploy time, not on every checkout: the repo ships deploy.yml as a
+# template on purpose, so a hard check on the default verify path would make the
+# gate permanently red against a file meant to be filled per target.
+placeholders="$(grep -n -- '<-- CHANGE' config/deploy.yml | grep -Ev '^[0-9]+:[[:space:]]*#' || true)"
+if [[ -n "$placeholders" ]]; then
+  echo "[pre-deploy] config/deploy.yml still has unfilled placeholders — fill them before deploying:" >&2
+  echo "$placeholders" >&2
+  exit 1
+fi
+
 echo "[pre-deploy] Verifying ERP access policies before deploy..."
 STAGES="policies" bash harden/verify.sh
 echo "[pre-deploy] Policies compiled and tests passed. Proceeding with deploy."

@@ -1,0 +1,41 @@
+# Runnable definition for the Contract-A MCP sidecar (integration/mcp/server.py).
+#
+# This is the PRODUCER side of the wiring the agent platform already expects:
+# langgraph-agents/specialists/registry.py binds "http://access-management-mcp:8085"
+# as a cross-cutting server for every specialist. Both the service key and
+# container_name must stay exactly `access-management-mcp` — that name is the API.
+#
+# The bearer is required, never defaulted: `ACCESS_MCP_TOKEN` is interpolated with
+# the `:?` form so `docker compose up` fails loudly if it is unset, instead of
+# handing the container an empty token and relying solely on the in-process
+# refuse-to-start guard.
+#
+#   export ACCESS_MCP_TOKEN=<bearer>
+#   docker compose -f docker-compose.mcp.yml up -d
+#
+# Reaches the PDP by container name over the estate's shared network. Bring the
+# PDP up first (its container must be named `access-management`).
+
+networks:
+  default:
+    name: erp_shared_network
+    external: true
+
+services:
+  access-management-mcp:
+    container_name: access-management-mcp
+    build:
+      context: .
+      dockerfile: deploy/mcp/Dockerfile
+    # For a registry deploy, pin an exact tag (git SHA preferred), never :latest:
+    # image: ghcr.io/gridiron-robotics/access-management-mcp:<sha>
+    environment:
+      CERBOS_PDP_URL: http://access-management:3592
+      # service.name == the OpenObserve stream name, so a PDP outage opens the
+      # self-heal incident under this name.
+      OTEL_SERVICE_NAME: access_management
+      # OTEL_EXPORTER_OTLP_ENDPOINT: http://openobserve-collector:4318
+      ACCESS_MCP_TOKEN: ${ACCESS_MCP_TOKEN:?ACCESS_MCP_TOKEN must be set — this surface answers "who may do what" and will not start unauthenticated}
+    ports:
+      - "8085:8085"
+    restart: unless-stopped

@@ -1,0 +1,42 @@
+# Illustrates deploying the Contract-A MCP sidecar alongside the Cerbos PDP.
+#
+# The sidecar is the agent-plane surface (integration/mcp/server.py): it answers
+# "may this principal do that?" for the agent brain before an action is planned,
+# and forwards decisions to the PDP. It is a SEPARATE Deployment + Service from
+# the PDP so it can be restarted or removed without touching the engine.
+#
+# The bearer token is NEVER in values. Create it first:
+#   kubectl create secret generic access-mcp --from-literal=ACCESS_MCP_TOKEN=<token>
+# then reference it via mcp.existingSecret below.
+
+mcp:
+  enabled: true
+  image:
+    # Pin an exact, immutable tag — never :latest. Replace with your registry path.
+    repository: ghcr.io/gridiron-robotics/access-management-mcp
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  port: 8085
+  service:
+    # The agent platform binds this exact name; keep it unless the consumer changes too.
+    name: access-management-mcp
+    type: ClusterIP
+  # Pre-created Secret holding ACCESS_MCP_TOKEN (see header). Required when enabled.
+  existingSecret: access-mcp
+  tokenSecretKey: ACCESS_MCP_TOKEN
+  # Run unprivileged, mirroring deploy/mcp/Dockerfile (USER 10001).
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  # Optional: point traces/error logs at the OpenObserve collector so a PDP
+  # outage opens a self-heal incident under service.name=access_management.
+  env:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: http://openobserve-collector:4318

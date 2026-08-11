@@ -1,0 +1,74 @@
+{{- if .Values.mcp.enabled }}
+{{- if not .Values.mcp.existingSecret }}
+{{- fail "mcp.enabled requires mcp.existingSecret naming a pre-created Secret that holds ACCESS_MCP_TOKEN (kubectl create secret generic access-mcp --from-literal=ACCESS_MCP_TOKEN=...). The sidecar refuses to start without the token, so fail at render rather than CrashLoopBackOff." }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cerbos.mcp.fullname" . }}
+  labels:
+    {{- include "cerbos.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: {{ .Values.mcp.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "cerbos.mcp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cerbos.mcp.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.mcp.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mcp
+          {{- with .Values.mcp.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          image: {{ include "cerbos.mcp.image" . }}
+          imagePullPolicy: {{ .Values.mcp.image.pullPolicy }}
+          ports:
+            - name: mcp
+              containerPort: {{ .Values.mcp.port }}
+          env:
+            # The PDP the sidecar forwards decisions to. Built from the in-cluster
+            # Cerbos Service so a TLS-enabled install does not point the sidecar
+            # at http.
+            - name: CERBOS_PDP_URL
+              value: "{{ include "cerbos.httpScheme" . }}://{{ include "cerbos.fullname" . }}:{{ .Values.service.httpPort }}"
+            # Observability: service.name == the OpenObserve stream name, so a
+            # PDP outage opens the self-heal incident under this name.
+            - name: OTEL_SERVICE_NAME
+              value: "access_management"
+            # The bearer that guards the estate's authorization model. Injected
+            # ONLY from a Secret — it must never sit in the rendered pod spec.
+            - name: ACCESS_MCP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.mcp.existingSecret }}
+                  key: {{ .Values.mcp.tokenSecretKey }}
+            {{- with .Values.mcp.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          # The MCP serves HEAD / (integration/mcp/server.py), not GET /, so an
+          # httpGet probe would 405. A TCP check proves the listener is up
+          # without asserting a route that does not exist.
+          readinessProbe:
+            tcpSocket:
+              port: mcp
+          livenessProbe:
+            tcpSocket:
+              port: mcp
+          {{- with .Values.mcp.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
