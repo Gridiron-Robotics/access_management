@@ -23,6 +23,30 @@ below is true. `harden/gate.sh` enforces the automated ones.
 > A gate only proves what it actually runs. If `verify.sh` reports SKIP for any
 > stage, that coverage is missing — install the tool or rely on CI.
 
+### Known blocker: `vuln` is RED, and the fix is outside this repo's charter
+
+Install `govulncheck` (`bash harden/setup.sh vuln`) and the stage goes RED, not
+green — it was only ever SKIPPING because the tool was absent, which is the
+"SKIP quietly becomes never" failure the gate warns about. Measured with
+`govulncheck v1.1.4` against the toolchain in `go.mod`:
+
+> **11 vulnerabilities the code actually calls** — 9 in the Go standard library
+> (`net/url`, `html/template`, `crypto/tls` ×2, `net/http` ×2, `encoding/xml`,
+> `encoding/asn1`, `os`), fixed in **go1.26.5/1.26.6** versus the pinned
+> `toolchain go1.26.4`; plus **GO-2026-6061** in `google.golang.org/grpc@v1.81.1`
+> → v1.82.1, and **GO-2026-5970** in `golang.org/x/text@v0.38.0` → v0.39.0.
+>
+> GO-2026-6061 is the one to look at first: it is in gRPC's **xDS RBAC
+> authorization engine and HTTP/2 transport server**, on a service whose entire
+> job is authorization over gRPC.
+
+Every one of these is fixed by editing `go.mod` (the `toolchain` directive, the
+`grpc` require, the `x/text` require) — which **golden rule 1 puts off-limits**.
+So this does not get patched here. Raise it with whoever owns the fork's
+upstream sync: rebase onto a Cerbos release built on go1.26.6 with grpc ≥1.82.1,
+then re-run `STAGES=vuln bash harden/verify.sh`. Do **not** close this box by
+adding an ignore list — that converts a real finding back into a silent SKIP.
+
 ## Deploy-readiness
 
 - [ ] Cerbos image tag is pinned in `deploy/kamal/Dockerfile` (no `:latest`).
