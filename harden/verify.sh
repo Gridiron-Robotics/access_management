@@ -9,7 +9,7 @@
 #   FAST=1 bash harden/verify.sh                   # quick deploy-readiness subset
 #   STAGES="policies kamal" bash harden/verify.sh  # run only these stages
 #
-# Stages: compile lint test vuln policies integration helm kamal docker
+# Stages: compile lint test vuln policies integration helm kamal deploy compose docker
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -115,7 +115,23 @@ stage_integration() {
   python3 -c 'import fastapi, pytest' >/dev/null 2>&1 || return 2
   python3 -m pytest integration/tests -q
 }
-stage_helm()     { have helm || return 2; helm lint deploy/charts/cerbos; }
+# `helm lint deploy/charts/cerbos` renders with DEFAULT values, and mcp.enabled
+# defaults to false — so on its own it never touches a single line of the MCP
+# sidecar templates. Measured: deleting mcp-deployment.yaml, or the render-time
+# `fail` that demands mcp.existingSecret, left this stage green. The lint stays
+# (it checks the chart as upstream ships it); the guard checks are what make the
+# stage able to notice our half of the chart disappearing.
+stage_helm()     {
+  have helm || return 2
+  helm lint deploy/charts/cerbos || return 1
+  bash harden/check_deploy_guards.sh helm
+}
+
+# The deploy-time refusals. See harden/check_deploy_guards.sh for why these are
+# separate stages: a guard that nothing executes is a comment, and every one of
+# these was a comment until it was measured.
+stage_deploy()   { bash harden/check_deploy_guards.sh hook; }
+stage_compose()  { have docker || return 2; bash harden/check_deploy_guards.sh compose; }
 stage_kamal()    {
   if have kamal; then kamal config
   elif have bundle && [[ -f Gemfile ]] && bundle exec kamal version >/dev/null 2>&1; then bundle exec kamal config
@@ -126,9 +142,9 @@ stage_docker()   { have docker || return 2; docker build -f deploy/kamal/Dockerf
 
 # ---- select & run --------------------------------------------------------
 if [[ "${FAST:-0}" == "1" ]]; then
-  STAGES="${STAGES:-policies integration kamal helm}"
+  STAGES="${STAGES:-policies integration kamal helm deploy compose}"
 else
-  STAGES="${STAGES:-compile lint test vuln policies integration helm kamal}"
+  STAGES="${STAGES:-compile lint test vuln policies integration helm kamal deploy compose}"
 fi
 
 for s in $STAGES; do
@@ -141,6 +157,8 @@ for s in $STAGES; do
     integration) run_stage integration stage_integration ;;
     helm)     run_stage helm     stage_helm     ;;
     kamal)    run_stage kamal    stage_kamal    ;;
+    deploy)   run_stage deploy   stage_deploy   ;;
+    compose)  run_stage compose  stage_compose  ;;
     docker)   run_stage docker   stage_docker   ;;
     # A stage name the judge does not recognise is a FAILURE, not a notice.
     # Silently continuing means a typo in STAGES quietly drops a check while

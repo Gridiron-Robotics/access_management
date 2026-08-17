@@ -11,8 +11,14 @@ below is true. `harden/gate.sh` enforces the automated ones.
 - [ ] **test** — the Go test suite passes (`-tags=tests,integration`).
 - [ ] **vuln** — `govulncheck` reports no known vulnerabilities.
 - [ ] **policies** — `cerbos compile policies/` compiles AND all policy tests pass.
-- [ ] **helm** — `helm lint deploy/charts/cerbos` passes.
+- [ ] **helm** — `helm lint deploy/charts/cerbos` passes, AND the MCP-enabled render
+      actually ships the Contract-A Service/port with the bearer arriving only by
+      `secretKeyRef`, AND enabling it without `mcp.existingSecret` fails at render.
 - [ ] **kamal** — `kamal config` (or the structural validator) passes; Kamal pinned to 2.11.0.
+- [ ] **deploy** — the Kamal pre-deploy hook actually blocks an unfilled
+      `config/deploy.yml`, and actually lets a filled one through.
+- [ ] **compose** — `docker-compose.mcp.yml` refuses to render without
+      `ACCESS_MCP_TOKEN` and still names the service/port the agent platform binds.
 
 > A gate only proves what it actually runs. If `verify.sh` reports SKIP for any
 > stage, that coverage is missing — install the tool or rely on CI.
@@ -26,6 +32,9 @@ below is true. `harden/gate.sh` enforces the automated ones.
 - [ ] Admin API and playground are disabled in `deploy/kamal/conf.yaml`.
 - [ ] `docker build -f deploy/kamal/Dockerfile .` succeeds (run `STAGES=docker verify.sh`).
 - [ ] The pre-deploy hook (`.kamal/hooks/pre-deploy`) blocks deploys on bad policies.
+- [ ] Every guard above is **executed by a stage**, not merely present in a file.
+      A guard nothing runs is a comment: five deletions of these guards once left
+      the gate GREEN. `harden/check_deploy_guards.sh` is what closed that.
 
 ## Access-policy quality
 
