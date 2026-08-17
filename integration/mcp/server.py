@@ -63,7 +63,20 @@ def create_app(checker: Any = None, token: str | None = None) -> FastAPI:
     resolved_token = token if token is not None else _require_token()
     surface = ContractSurface(checker or _cerbos_checker())
 
-    app = FastAPI(title="access_management PDP (Contract-A)")
+    # FastAPI serves /docs, /redoc and /openapi.json unauthenticated by default.
+    # On this surface that contradicts the reason the catalog is gated at all:
+    # anyone who can reach the port gets the service's identity and its route
+    # shapes for free, which is the first half of the map we refuse to hand out
+    # at GET /tools. The estate contract (integration/CONTRACT.md) names exactly
+    # three routes and one of them — HEAD / — is the only open one; these were
+    # never part of it. The consumers are the agent gateway and the k8s probes,
+    # and neither reads an OpenAPI document.
+    app = FastAPI(
+        title="access_management PDP (Contract-A)",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
 
     # ERROR logs ride the OTLP rail to OpenObserve, where `level = error` opens
     # a self-heal incident against the `access_management` stream.

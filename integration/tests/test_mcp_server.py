@@ -108,6 +108,22 @@ class TestAuthentication:
     def test_liveness_is_open_because_it_reveals_only_reachability(self, client):
         assert client.head("/").status_code == 200
 
+    @pytest.mark.parametrize("path", ["/openapi.json", "/docs", "/redoc"])
+    def test_the_framework_docs_endpoints_are_not_served(self, client, path):
+        """
+        FastAPI mounts /docs, /redoc and /openapi.json unauthenticated by
+        default. That contradicts the reason GET /tools is gated: the schema
+        names the service and enumerates its routes to anyone who can reach the
+        port, which is the first half of the map we refuse to hand out. HEAD /
+        is the only open route on this surface — it reveals reachability and
+        nothing else.
+        """
+        response = client.get(path)
+        assert response.status_code == 404, (
+            f"{path} is being served; an unauthenticated caller can read the schema of "
+            "the estate's authorization surface"
+        )
+
 
 class TestContractShape:
     def test_tools_lists_the_catalog(self, client):
