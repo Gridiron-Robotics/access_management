@@ -124,6 +124,15 @@ lie; `200 {allowed:true}` would be a breach. The caller must retry or stop.
   start**. There is no dev-convenience default: this surface is both a map of
   the authorization model and a way to ask questions as somebody else.
 - **Constant-time bearer comparison** (`hmac.compare_digest`).
+- **`HEAD /` is the only open route.** FastAPI's `/docs`, `/redoc` and
+  `/openapi.json` are switched off (`404`), not merely undocumented. Served,
+  they hand an unauthenticated caller the service's identity and its route
+  shapes — the first half of the map `GET /tools` exists to withhold.
+- **The bearer is the whole trust boundary.** Like any PDP, this one evaluates
+  the principal it is *given*; it does not authenticate the end user. A caller
+  holding the token can ask a question as any principal, so the token is a
+  service credential for the gateway and nothing else. It belongs in a Secret,
+  never in `env.clear`, chart values, or an image layer.
 - **Tenant comes from the principal.** `X-Tenant-Id` may only *restate* it;
   a mismatch is `403`, never a silent preference for either side.
 - **A missing tenant is refused, not defaulted.** Every commerce and agent
@@ -145,6 +154,18 @@ happens to own the resource.
 ```
 GATEWAY_TOKENS={"http://access-management-mcp:8085":"<ACCESS_MCP_TOKEN>"}
 ```
+
+Stand the producer up next to the PDP (the consumer wiring above resolves the
+`access-management-mcp` container by name on `erp_shared_network`):
+
+```
+export ACCESS_MCP_TOKEN=<bearer>
+docker compose -f docker-compose.mcp.yml up -d
+```
+
+On Kubernetes it ships from the same Helm chart with `mcp.enabled=true`
+(`deploy/charts/cerbos/values-mcp.yaml`); on plain Docker hosts it is the
+`accessories.mcp` block in `config/deploy.yml`.
 
 Discovery is best-effort on the consumer side: if this gateway is unreachable at
 factory time the specialist still boots with its own tools. That degradation is

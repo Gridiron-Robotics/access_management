@@ -23,6 +23,12 @@ opentelemetry-api==1.42.1
 opentelemetry-sdk==1.42.1
 opentelemetry-exporter-otlp-proto-http==1.42.1
 opentelemetry-instrumentation-fastapi==0.63b1
+# setup_observability() also instruments httpx so outbound calls carry the
+# traceparent — one incident keeps one trace id across services. The import sits
+# in a try/except, so leaving this out did not break the boot: the container
+# just came up with propagation silently off. Pinned in lockstep with the other
+# instrumentation package (both 0.63b1, against opentelemetry 1.42.1).
+opentelemetry-instrumentation-httpx==0.63b1
 
 # --- tests ----------------------------------------------------------------
 pytest==7.4.3

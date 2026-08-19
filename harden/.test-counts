@@ -1,0 +1,37 @@
+# The test-count ratchet: the FLOOR for the two suites this repo owns.
+#
+# WHY A FLOOR AND NOT A DOCUMENT
+# ------------------------------
+# The gate ran the policy suite and the integration suite and reported the
+# tool's exit code. Deleting a test case therefore left it GREEN — a smaller
+# suite still passes. "159 tests should pass" written in a checklist is not a
+# ratchet; nothing reads it. These numbers are read by `stage_ratchet` in
+# harden/verify.sh, which RE-DERIVES both counts from the suites as they exist
+# right now (two independent derivations each, which must agree) and fails when
+# the live count is under the floor.
+#
+# HOW TO CHANGE THEM
+# ------------------
+# Raising a floor: add tests, run `bash harden/verify.sh` (the stage prints the
+# new number), commit the higher value. That is the ratchet moving.
+#
+# Lowering a floor: the stage REFUSES it. It reads every value this file has
+# ever held in git history and fails when the working value is below the
+# highest one, because "the gate went red so I edited the number down" is
+# exactly the failure this file exists to prevent. A genuinely smaller suite
+# (a module extracted to its own repo, say) needs the removal reviewed on its
+# own merits, so it must be recorded here as an explicit, greppable line:
+#
+#   allow_lower=<key>:<old>:<new>:<reason>
+#
+# which the stage honours ONCE for that exact old->new step and announces in
+# capitals on every subsequent run. There is no quiet way down.
+#
+# policies    — cases executed by `cerbos compile policies/`, i.e. the
+#               principals x resources x actions cross-product of every
+#               `tests[].input` block under policies/*/*_test.yaml.
+# integration — tests that actually PASS in `pytest integration/tests`.
+#               Passing, not collected: a test turned into a skip stops
+#               asserting, and this floor notices.
+policies=191
+integration=77

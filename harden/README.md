@@ -14,6 +14,8 @@ and let a set of pass/fail checks be the judge.
 | `gate.sh` | **The bouncer** | Final verdict: green judge **AND** no unresolved critical/high findings. |
 | `DONE.md` | **The finish line** | The checklist that defines "done". |
 | `validate_kamal.rb` | helper | Structurally checks the Kamal config when the `kamal` CLI isn't installed. |
+| `.test-counts` | **the floor** | The number of tests each suite must still have. `verify.sh`'s `ratchet` stage re-derives both counts from the live suites (twice each, independently) and goes red when they drop — deleting a test used to leave the gate green. |
+| `check_deploy_guards.sh` | helper | **Runs** the deploy-time refusals — the placeholder hook, the compose bearer, the Helm Secret guard — in both directions. Nothing executed them before, and five mutations that deleted them left the gate GREEN. |
 
 ## What the loop is and isn't allowed to touch
 
@@ -33,7 +35,7 @@ chmod +x harden/*.sh .kamal/hooks/pre-deploy
 
 # 1) Run the judge by hand. See exactly what's green/red.
 bash harden/verify.sh
-#    Fast subset while iterating (policies + kamal + helm only):
+#    Fast subset while iterating (policies, integration, kamal, helm, deploy, compose):
 FAST=1 bash harden/verify.sh
 #    Just one thing:
 STAGES="policies" bash harden/verify.sh
@@ -62,7 +64,9 @@ git diff
 
 ## Tools the full gate wants installed
 
-`go` (required), `golangci-lint`, `gotestsum`, `govulncheck`, `helm`, and
-`kamal` (via `bundle install`). Missing tools show as `SKIP` — that coverage is
+`go` (required), `golangci-lint`, `gotestsum`, `govulncheck`, `helm`, `kamal`
+(via `bundle install`), and the `docker` CLI — the `compose` stage only calls
+`docker compose config`, which interpolates and validates without a running
+daemon. Missing tools show as `SKIP` — that coverage is
 simply not being checked locally. CI (`.github/workflows/gatekeeper.yml`)
 installs them so nothing is skipped on a pull request.

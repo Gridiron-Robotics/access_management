@@ -1,0 +1,22 @@
+{{- if .Values.mcp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  # Hard-code-compatible default `access-management-mcp`: the agent platform
+  # resolves this exact DNS name (langgraph-agents/specialists/registry.py).
+  name: {{ .Values.mcp.service.name }}
+  labels:
+    {{- include "cerbos.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp
+spec:
+  type: {{ .Values.mcp.service.type }}
+  ports:
+    - port: {{ .Values.mcp.port }}
+      targetPort: mcp
+      protocol: TCP
+      name: mcp
+  # The mcp selector labels (distinct name+component) so this Service never
+  # fronts the PDP pods.
+  selector:
+    {{- include "cerbos.mcp.selectorLabels" . | nindent 4 }}
+{{- end }}

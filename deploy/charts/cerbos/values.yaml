@@ -370,3 +370,117 @@ cerbos:
   # Cerbos config file contents.
   # Some server settings like server.httpListenAddr, server.grpcListenAddr, server.tls will be overwritten by the chart based on values provided above.
   config: {}
+
+# @schema
+# required: false
+# @schema
+# Contract-A MCP sidecar (integration/mcp/server.py) — the agent-plane surface
+# that answers "may this principal do that?" before an action is planned. A
+# SEPARATE Deployment + Service from the Cerbos PDP on purpose: the PDP is
+# upstream Cerbos (Go) and is not ours to modify, so the sidecar can be
+# restarted or removed without touching the engine every enforcing service
+# depends on. Disabled by default so a default render is byte-identical to
+# upstream. See deploy/charts/cerbos/values-mcp.yaml for an enabled example.
+mcp:
+  # @schema
+  # default: false
+  # @schema
+  # Render the MCP sidecar Deployment + Service. Off by default.
+  enabled: false
+  # @schema
+  # required: false
+  # @schema
+  # Sidecar image, built from deploy/mcp/Dockerfile. Pin an exact tag; a
+  # floating one makes the deploy unreproducible.
+  image:
+    # @schema
+    # type: [string,null]
+    # @schema
+    # Container image name without the tag.
+    repository: ""
+    # @schema
+    # enum: [IfNotPresent, Always]
+    # default: IfNotPresent
+    # @schema
+    # Image pull policy.
+    pullPolicy: IfNotPresent
+    # @schema
+    # type: [string,null]
+    # @schema
+    # Image digest to use. Takes precedence over tag if specified.
+    digest: ""
+    # @schema
+    # type: [string,null]
+    # @schema
+    # Image tag to use.
+    tag: ""
+  # @schema
+  # type: [integer]
+  # default: 1
+  # @schema
+  # Number of sidecar pods to run.
+  replicaCount: 1
+  # @schema
+  # type: [integer]
+  # default: 8085
+  # @schema
+  # Port the MCP surface listens on. Contract-A fixes this at 8085.
+  port: 8085
+  # @schema
+  # required: false
+  # @schema
+  # Service settings for the sidecar.
+  service:
+    # @schema
+    # default: access-management-mcp
+    # @schema
+    # Service name. The agent platform binds this exact DNS name
+    # (langgraph-agents/specialists/registry.py), so keep the default unless the
+    # consumer is updated in lockstep.
+    name: access-management-mcp
+    # @schema
+    # enum: [ClusterIP, NodePort, LoadBalancer]
+    # default: ClusterIP
+    # @schema
+    # Service type.
+    type: ClusterIP
+  # @schema
+  # type: [string,null]
+  # @schema
+  # Name of a PRE-CREATED Secret holding ACCESS_MCP_TOKEN. REQUIRED when
+  # mcp.enabled — the chart fails to render without it. No token value ever
+  # lives in these values.
+  #   kubectl create secret generic access-mcp --from-literal=ACCESS_MCP_TOKEN=...
+  existingSecret: ""
+  # @schema
+  # type: [string,null]
+  # default: ACCESS_MCP_TOKEN
+  # @schema
+  # Key within existingSecret that holds the bearer token.
+  tokenSecretKey: ACCESS_MCP_TOKEN
+  # @schema
+  # type: [object, null]
+  # additionalProperties: true
+  # @schema
+  # Resource limits for the sidecar container.
+  resources: {}
+  # @schema
+  # type: [object, null]
+  # additionalProperties: true
+  # @schema
+  # Security context for the sidecar pod.
+  podSecurityContext: {}
+  # @schema
+  # type: [object, null]
+  # additionalProperties: true
+  # @schema
+  # Security context for the sidecar container.
+  securityContext: {}
+  # @schema
+  # type: [array, null]
+  # items:
+  #   type: object
+  #   additionalProperties: true
+  # @schema
+  # Extra environment variables for the sidecar (e.g. OTEL_* exporter settings).
+  env: []
