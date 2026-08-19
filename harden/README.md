@@ -14,6 +14,7 @@ and let a set of pass/fail checks be the judge.
 | `gate.sh` | **The bouncer** | Final verdict: green judge **AND** no unresolved critical/high findings. |
 | `DONE.md` | **The finish line** | The checklist that defines "done". |
 | `validate_kamal.rb` | helper | Structurally checks the Kamal config when the `kamal` CLI isn't installed. |
+| `.test-counts` | **the floor** | The number of tests each suite must still have. `verify.sh`'s `ratchet` stage re-derives both counts from the live suites (twice each, independently) and goes red when they drop — deleting a test used to leave the gate green. |
 | `check_deploy_guards.sh` | helper | **Runs** the deploy-time refusals — the placeholder hook, the compose bearer, the Helm Secret guard — in both directions. Nothing executed them before, and five mutations that deleted them left the gate GREEN. |
 
 ## What the loop is and isn't allowed to touch

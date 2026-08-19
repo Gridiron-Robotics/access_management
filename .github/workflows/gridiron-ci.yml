@@ -26,6 +26,11 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The test-count ratchet reads every value harden/.test-counts has
+          # ever held, to refuse a floor edited downwards. A depth-1 clone can
+          # only see the value in HEAD, which is the lowered one.
+          fetch-depth: 0
 
       - name: Install the tools the gate needs
         shell: bash
@@ -41,7 +46,7 @@ jobs:
           # hole. Every stage named here must actually RUN — if the Docker
           # daemon is down or vuln.go.dev is unreachable, this build goes red
           # rather than reporting a green that proved nothing.
-          REQUIRE_STAGES: "compile lint test vuln policies integration helm kamal deploy compose"
+          REQUIRE_STAGES: "compile lint test vuln policies integration ratchet helm kamal deploy compose"
         run: |
           set -euo pipefail
           # First gate script that exists wins (matches gridiron-ci.sh).

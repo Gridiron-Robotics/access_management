@@ -11,6 +11,10 @@ below is true. `harden/gate.sh` enforces the automated ones.
 - [ ] **test** — the Go test suite passes (`-tags=tests,integration`).
 - [ ] **vuln** — `govulncheck` reports no known vulnerabilities.
 - [ ] **policies** — `cerbos compile policies/` compiles AND all policy tests pass.
+- [ ] **ratchet** — the live test counts, RE-DERIVED two independent ways per
+      suite, meet the floor in `harden/.test-counts` (policies=191, integration=77).
+      Running a suite and reading its exit code cannot see a *deleted* test — a
+      shorter suite passes just as green. This stage can.
 - [ ] **helm** — `helm lint deploy/charts/cerbos` passes, AND the MCP-enabled render
       actually ships the Contract-A Service/port with the bearer arriving only by
       `secretKeyRef`, AND enabling it without `mcp.existingSecret` fails at render.
@@ -77,3 +81,10 @@ adding an ignore list — that converts a real finding back into a silent SKIP.
 
 Each real bug you hit, **add a gate for it** so it can never come back:
 a new policy test, a new `verify.sh` stage, or a new checklist line here.
+
+The counts themselves are ratcheted by `harden/.test-counts` + the `ratchet`
+stage. Adding tests? Raise the floor. Deleting them? The gate names the
+shortfall and refuses a floor edited downwards — measured: deleting one policy
+test case took the stage to RED naming `-1`, and lowering the floor to match was
+refused against the value in git history. A counter pinned to a constant is
+caught by its partner derivation disagreeing.
