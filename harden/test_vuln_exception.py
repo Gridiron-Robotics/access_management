@@ -200,3 +200,36 @@ def test_the_normal_progress_line_is_not_read_as_unreachable(monkeypatch):
                 stderr="Fetching vulnerabilities from the database...\n"
                        "Checking the code against the vulnerabilities...")
     assert code == 0, "the normal progress output was mistaken for an unreachable database"
+
+
+def test_the_two_zero_finding_reasons_are_reported_differently(monkeypatch, capsys):
+    """Both exit 2 — but a human does opposite things with them.
+
+    "The database was unreachable" means fix the network and re-run. "No
+    reachable vulnerabilities" means the exception may be stale and the row may
+    be closeable. Collapsing the two into one message is how an outage gets
+    filed as good news. This is what the unreachable-signature regex is FOR:
+    it changes no exit code, only which of these an operator reads.
+    """
+    tmp = _HERE / "_tmp_exception.md"
+    tmp.write_text(_GOOD_DOC)
+    monkeypatch.setattr(chk, "_DOC", tmp)
+    try:
+        monkeypatch.setattr(chk.subprocess, "run",
+                            lambda *a, **k: _Proc("", "vuln.go.dev: no such host"))
+        assert chk.main() == 2
+        unreachable_msg = capsys.readouterr().out
+
+        monkeypatch.setattr(chk.subprocess, "run",
+                            lambda *a, **k: _Proc("", "Fetching vulnerabilities from the database..."))
+        assert chk.main() == 2
+        clean_msg = capsys.readouterr().out
+    finally:
+        tmp.unlink(missing_ok=True)
+
+    assert "NOTHING WAS SCANNED" in unreachable_msg
+    assert "NOTHING WAS SCANNED" not in clean_msg, (
+        "a successful scan that found nothing was reported as an unreachable "
+        "database — an outage filed as good news, or the reverse"
+    )
+    assert "RESOLVED" in clean_msg
