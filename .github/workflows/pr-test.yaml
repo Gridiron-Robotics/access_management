@@ -352,6 +352,23 @@ jobs:
             goreleaser
             syft
 
+      # A snapshot is versioned "<latest tag, minor+1>-prerelease", and the npm
+      # hook refuses a binary whose version differs from npm/packages/*. This
+      # fork has no tags, so goreleaser would fall back to 0.1.0-prerelease.
+      # Only when there is no tag, derive the tag the packages imply
+      # (0.54.0-prerelease -> v0.53.0) so both come from one source.
+      - name: Derive snapshot base tag when the clone has none
+        run: |-
+          if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            exit 0
+          fi
+          version="$(jq --raw-output .version npm/packages/cerbos/package.json)"
+          if [[ ! "${version}" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+-prerelease$ ]] || [[ "${BASH_REMATCH[2]}" -eq 0 ]]; then
+            echo "::error::cannot derive a base tag from npm package version ${version}"
+            exit 1
+          fi
+          echo "GORELEASER_CURRENT_TAG=v${BASH_REMATCH[1]}.$((BASH_REMATCH[2] - 1)).0" >> "${GITHUB_ENV}"
+
       - name: Build binaries
         run: goreleaser build --config=.goreleaser.yml --clean --snapshot
         env:
