@@ -293,23 +293,19 @@ jobs:
           format: true
           lint: true
 
+      # The compatibility baseline is upstream Cerbos's latest release. This fork
+      # has no releases or tags of its own, so ask upstream for the tag and let
+      # buf fetch it from there rather than resolving it in the local clone.
       - name: Find latest release
         id: latest-release
-        run: gh release view --json tagName --jq '"tag=\(.tagName)"' >> "$GITHUB_OUTPUT"
+        run: gh release view --repo cerbos/cerbos --json tagName --jq '"tag=\(.tagName)"' >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ github.token }}
-
-      - name: Set latest release commit ID
-        id: latest_release_commit_id
-        run: |
-          echo "LATEST_RELEASE_COMMIT_ID=$(git rev-list -n 1 "tags/${STEPS_LATEST_RELEASE_OUTPUTS_TAG}")" >> "$GITHUB_OUTPUT"
-        env:
-          STEPS_LATEST_RELEASE_OUTPUTS_TAG: ${{ steps.latest-release.outputs.tag }}
 
       - name: Check backwards compatibility
         uses: cerbos/buf-breaking-action@b637955df51832cca5dd244fb3ac9ab35781cdb5 # since
         with:
-          against: https://github.com/cerbos/cerbos.git#ref=${{ steps.latest_release_commit_id.outputs.LATEST_RELEASE_COMMIT_ID }}
+          against: https://github.com/cerbos/cerbos.git#tag=${{ steps.latest-release.outputs.tag }}
           since: https://github.com/cerbos/cerbos.git#ref=main
 
   test-helm:
