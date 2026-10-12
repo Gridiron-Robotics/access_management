@@ -41,6 +41,16 @@ On each access check, the backend:
 The HRMS page itself does **not** call Cerbos to *save* anything — Cerbos is
 stateless. The page just records role assignments your backend later sends.
 
+## Token roles (Keycloak)
+
+Catalog roles marked `keycloak_realm_role: true` (`ops`, `hr`, `warehouse`,
+`external_auditor`) are also Keycloak realm roles in realm `erp`; the ERP
+middleware reads them from the token as scopes. The access page is where they
+are assigned: saving pushes them to Keycloak, and
+`manage.py sync_keycloak_roles [--dry-run]` reconciles everyone. The sync never
+touches any other realm role. Details, configuration and the failure model:
+[`horilla/README.md`](horilla/README.md#token-roles-reach-keycloak-realm-erp).
+
 ## Keeping the menu in sync
 
 The menu = `role-catalog.yaml`. The rule behind each role = `policies/**` (and,

@@ -48,9 +48,13 @@ resourcePolicy:
     # Non-destructive dispatch, restricted to the servers this caller may reach.
     # `tool_scopes` is what stops an agent with a legitimate reason to read
     # inventory from also reaching the accounting or payments servers.
+    #
+    # `ops`, `hr` and `warehouse` are the ERP-gateway token roles: the
+    # middleware reads them as the OPS / HR / WAREHOUSE tool scopes. They
+    # dispatch like staff, and destructive tools only with an approval (below).
     - actions: ["dispatch"]
       effect: EFFECT_ALLOW
-      roles: ["agent_operator", "staff"]
+      roles: ["agent_operator", "staff", "ops", "hr", "warehouse"]
       condition:
         match:
           all:
@@ -63,9 +67,13 @@ resourcePolicy:
     # approval for this specific call. The approval is a resource attribute the
     # gateway sets after the HITL checkpoint clears — so "the agent decided it
     # was fine" can never satisfy this rule on its own.
+    #
+    # The OPS / HR / WAREHOUSE scopes in the middleware include destructive
+    # tools (placement release, holds, stock decrement, time logging), each
+    # behind the HITL checkpoint — so those roles get exactly this rule too.
     - actions: ["dispatch"]
       effect: EFFECT_ALLOW
-      roles: ["agent_supervisor", "admin"]
+      roles: ["agent_supervisor", "admin", "ops", "hr", "warehouse"]
       condition:
         match:
           all:
@@ -85,13 +93,42 @@ resourcePolicy:
     # rather than a discovery in production.
     - actions: ["dispatch"]
       effect: EFFECT_DENY
-      roles: ["agent_operator", "agent_supervisor", "staff", "admin"]
+      roles: ["agent_operator", "agent_supervisor", "staff", "admin", "ops", "hr", "warehouse",
+              "external_auditor"]
       condition:
         match:
           all:
             of:
               - expr: request.resource.attr.destructive == true
               - expr: request.resource.attr.approved != true
+
+    # External auditor: the audit firm's self-serve READ surface and nothing
+    # else — the five audit_prep read tools the middleware allowlists for
+    # EXTERNAL_AUDITOR (mcp_gateway/services.py EXTERNAL_ROLE_TOOLS), in the
+    # auditor's own tenant, never a destructive tool (approved or not: an
+    # auditor who could draw a sample or build the package would be creating
+    # the evidence they are testing). Named by tool, not by server, so a new
+    # tool on the same server does not widen it. No list/describe either:
+    # those come from the `employee` baseline, which an external-only
+    # principal does not get (integration/horilla/cerbos_access/principal.py).
+    - actions: ["dispatch"]
+      effect: EFFECT_ALLOW
+      roles: ["external_auditor"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+              - expr: request.resource.attr.destructive == false
+              - expr: request.resource.attr.server in request.principal.attr.tool_scopes
+              - expr: >-
+                  request.resource.attr.tool in [
+                    "audit_prep.get_entity_audit_history",
+                    "audit_prep.verify_audit_chain",
+                    "audit_prep.list_pbc_items",
+                    "audit_prep.get_tie_out_run",
+                    "audit_prep.get_audit_package"
+                  ]
 
     # Administering the gateway itself (registering servers, editing scopes).
     - actions: ["administer"]

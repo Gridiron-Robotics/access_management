@@ -14,6 +14,9 @@ principals:
   admin_ada: { id: ada, roles: ["admin", "employee"],          attr: { tenant_id: tenant-a } }
   support_sue: { id: sue, roles: ["support_agent", "employee"], attr: { tenant_id: tenant-a } }
 
+  warehouse_wes: { id: wes, roles: ["warehouse", "employee"], attr: { tenant_id: tenant-a } }
+  warehouse_bo:  { id: bo,  roles: ["warehouse", "employee"], attr: { tenant_id: tenant-b } }
+  auditor_aud:   { id: aud, roles: ["external_auditor"],      attr: { tenant_id: tenant-a } }
 resources:
   atd_small:
     id: o1
@@ -69,3 +72,39 @@ tests:
     expected:
       - { principal: support_sue, resource: atd_small, actions: { cancel: EFFECT_ALLOW } }
       - { principal: support_sue, resource: fulfilled, actions: { cancel: EFFECT_DENY } }
+
+  - name: Warehouse role reads its tenant's orders but cannot change them
+    input:
+      principals: [warehouse_wes]
+      resources: [atd_small, atd_large_ok]
+      actions: [view, list, create, update, cancel, dispatch_dropship]
+    expected:
+      - principal: warehouse_wes
+        resource: atd_small
+        actions: { view: EFFECT_ALLOW, list: EFFECT_ALLOW, create: EFFECT_DENY, update: EFFECT_DENY, cancel: EFFECT_DENY, dispatch_dropship: EFFECT_DENY }
+      - principal: warehouse_wes
+        resource: atd_large_ok
+        actions: { view: EFFECT_ALLOW, list: EFFECT_ALLOW, create: EFFECT_DENY, update: EFFECT_DENY, cancel: EFFECT_DENY, dispatch_dropship: EFFECT_DENY }
+
+  - name: Warehouse role of another tenant cannot read the order
+    input:
+      principals: [warehouse_bo]
+      resources: [atd_small]
+      actions: [view, list, create, update, cancel, dispatch_dropship]
+    expected:
+      - principal: warehouse_bo
+        resource: atd_small
+        actions: { view: EFFECT_DENY, list: EFFECT_DENY, create: EFFECT_DENY, update: EFFECT_DENY, cancel: EFFECT_DENY, dispatch_dropship: EFFECT_DENY }
+
+  - name: External auditor is denied every order action
+    input:
+      principals: [auditor_aud]
+      resources: [atd_small, atd_large_ok]
+      actions: [view, list, create, update, cancel, dispatch_dropship]
+    expected:
+      - principal: auditor_aud
+        resource: atd_small
+        actions: { view: EFFECT_DENY, list: EFFECT_DENY, create: EFFECT_DENY, update: EFFECT_DENY, cancel: EFFECT_DENY, dispatch_dropship: EFFECT_DENY }
+      - principal: auditor_aud
+        resource: atd_large_ok
+        actions: { view: EFFECT_DENY, list: EFFECT_DENY, create: EFFECT_DENY, update: EFFECT_DENY, cancel: EFFECT_DENY, dispatch_dropship: EFFECT_DENY }

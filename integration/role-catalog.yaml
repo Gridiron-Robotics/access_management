@@ -5,6 +5,14 @@
 #
 # Keep this in sync with policies/**: every role key here must exist in a policy,
 # and every assignable role in a policy should appear here. (See ROLES.md.)
+# integration/tests/test_role_catalog.py enforces the first half and that
+# cerbos_access/catalog.py mirrors this file.
+#
+# `keycloak_realm_role: true` marks a role that must also reach the user's
+# Keycloak token (realm `erp`) as a realm role of the same name. Assigning it
+# on the access page is what grants it: the sync in cerbos_access/keycloak_sync.py
+# adds/removes exactly these realm roles and never touches any other realm role
+# a user holds. `external: true` marks a role for people outside the company.
 version: 1
 
 # Granted to all staff by default; enables ownership-based access (the `owner`
@@ -40,6 +48,13 @@ modules:
       - key: warehouse_manager
         label: Warehouse Manager
         description: Also transfer and delete items anywhere.
+      - key: warehouse
+        label: Warehouse (ERP gateway)
+        keycloak_realm_role: true
+        description: >-
+          Stock reads and adjustments in their own location; view tenant orders
+          and shipments; ERP gateway tools scoped to WAREHOUSE (destructive ones
+          only with a recorded human approval). No finance access.
 
   - key: hr
     label: HR / People
@@ -50,6 +65,13 @@ modules:
       - key: hr_manager
         label: HR Manager
         description: Also terminate employee records.
+      - key: hr
+        label: HR (ERP gateway)
+        keycloak_realm_role: true
+        description: >-
+          View and edit employee records (not terminate); ERP gateway tools
+          scoped to HR (destructive ones only with a recorded human approval).
+          No inventory or finance access.
 
   - key: sales
     label: Sales / CRM
@@ -146,6 +168,36 @@ modules:
       - key: agent_supervisor
         label: Agent Supervisor
         description: Dispatch destructive MCP tools, but only with a recorded human approval.
+
+  - key: operations
+    label: Operations
+    roles:
+      - key: ops
+        label: Operations (ERP gateway)
+        keycloak_realm_role: true
+        description: >-
+          View/create purchase orders (not approve) and view stock; ERP gateway
+          tools scoped to OPS — purchasing, receiving, placement release,
+          deduction holds, model governance (destructive ones only with a
+          recorded human approval). Cannot administer the gateway.
+
+  - key: external
+    label: External parties — NOT staff
+    description: >-
+      For people OUTSIDE the company (e.g. the audit firm). These roles grant
+      no staff access at all: do not combine them with staff roles, and do not
+      assign them to employees. An employee assigned only an external role is
+      not given the `employee` baseline either.
+    roles:
+      - key: external_auditor
+        label: External Auditor (read-only, NOT staff)
+        keycloak_realm_role: true
+        external: true
+        description: >-
+          Read-only audit evidence through the ERP gateway — the five audit_prep
+          read tools (entity change history, audit-chain check, PBC request
+          list, tie-out run, audit package) in their own tenant. Cannot change
+          anything anywhere.
 
 
 # Attributes the HRMS/ERP must supply per user (NOT toggled on the page; read at

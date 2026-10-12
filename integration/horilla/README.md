@@ -21,6 +21,7 @@ It gives you:
 | Employee attributes (department, …) | Horilla's existing `EmployeeWorkInformation` |
 | The rules (role → actions) | `policies/**` in access_management (+ optional Cerbos Hub) |
 | The yes/no decision | Cerbos PDP at request time |
+| Token roles (`ops`, `hr`, `warehouse`, `external_auditor`) in the user's Keycloak token | Keycloak realm `erp` role mappings — written by this app from `EmployeeAccess`, never by hand |
 
 ## Install (in your Horilla project)
 
@@ -44,6 +45,56 @@ It gives you:
 Open **Access Management → Employee Access**, search an employee, click **Edit
 access**, tick roles, **Save**. Hit **Preview access** to see (via Cerbos) what
 those roles allow.
+
+## Token roles reach Keycloak (realm `erp`)
+
+The ERP middleware authorizes from the Keycloak token, so the catalog roles
+marked `keycloak_realm_role: true` (today `ops`, `hr`, `warehouse`,
+`external_auditor`) must be realm roles on the user. This app makes that so;
+nobody assigns them in Keycloak by hand any more.
+
+- **On save** (`signals.py`): after the transaction commits, the employee's
+  token roles are pushed to Keycloak — missing ones added, revoked ones
+  removed. Opening the edit page (which creates an empty record) pushes
+  nothing. Deleting the record revokes the token roles.
+- **Full reconcile** (`management/commands/sync_keycloak_roles.py`):
+  ```bash
+  python manage.py sync_keycloak_roles --dry-run   # print the diff, change nothing
+  python manage.py sync_keycloak_roles             # apply
+  python manage.py sync_keycloak_roles --employee 42
+  ```
+  Run it once with `--dry-run` when you first configure the sync: anyone who
+  was granted one of these roles by hand in Keycloak and has no matching
+  assignment here would lose it. Schedule it (e.g. nightly) as the repair path.
+- **Only token roles are touched.** Every other realm role a user holds
+  (`manager`, `finance`, default roles, ...) is never added or removed. A user
+  who holds a token role but matches no employee (a service account, say) is
+  reported and left alone.
+- **Matching is by email.** `Employee.email` must equal the Keycloak user's
+  email (exact; exactly one user). Horilla stores no Keycloak user id, and the
+  Horilla username is not guaranteed to be the Keycloak username. No match or
+  several matches are reported; Keycloak users are never created.
+- **Configuration** — environment of the Horilla process (see
+  `settings_snippet.py`):
+
+  | Variable | Value |
+  |---|---|
+  | `KEYCLOAK_ADMIN_URL` | Keycloak base URL, e.g. `https://sso.example.com` |
+  | `KEYCLOAK_ADMIN_REALM` | `erp` (the default) |
+  | `KEYCLOAK_ADMIN_CLIENT_ID` | a confidential client in that realm with a service account |
+  | `KEYCLOAK_ADMIN_CLIENT_SECRET` | its secret — from your secret store, never committed |
+
+  Give the service account **only** the `realm-management` client roles
+  `manage-users` and `view-realm`. If the URL, client id or secret is unset the
+  sync is off: each save logs a warning and does nothing, and the command exits
+  non-zero. The secret and the access token are never logged.
+- **When Keycloak fails:** on save the error is logged and the access record
+  **stays saved** — the token is out of date until the next reconcile repairs
+  it. The command exits non-zero on any Keycloak error (after processing the
+  rest). A token role missing from the realm is reported as such; create it
+  per `keycloak/DEPLOYMENT.md` in `erp_django_middleware`.
+- A removal applies to newly issued tokens; an access token already issued
+  keeps the role until it expires (30 minutes in realm `erp`).
 
 ## How your ERP consumes assignments
 
@@ -74,3 +125,11 @@ This app is **syntax-checked but not yet run against your Horilla database** (it
 needs the full Horilla runtime). Install it on a branch, run the migration, and
 click through before relying on it. It follows Horilla's own conventions
 (sidebar.py, `@login_required`/`@permission_required`, HTMX, `index.html`).
+
+The Keycloak sync's logic (`keycloak_sync.py`, Django-free) is unit-tested
+against a faked Keycloak admin REST API in
+`integration/tests/test_keycloak_sync.py`. The Django glue (`signals.py`, the
+management command) was smoke-run once on Django 4.2.16 with a stand-in
+`employee.Employee` model and a faked Keycloak (save after commit, no push on a
+rolled-back save or an empty create, revoke on delete, dry-run, unconfigured
+exit code); not against a real Horilla or a live Keycloak.

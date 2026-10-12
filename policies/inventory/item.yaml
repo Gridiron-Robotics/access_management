@@ -8,14 +8,25 @@ resourcePolicy:
   importDerivedRoles:
     - common_erp_roles
   rules:
+    # `warehouse` and `ops` are the ERP-gateway token roles (WAREHOUSE / OPS
+    # scopes in the middleware). Ops reads stock for receiving and placement;
+    # it does not move it here.
     - actions: ["view"]
       effect: EFFECT_ALLOW
-      roles: ["warehouse_clerk", "warehouse_manager"]
+      roles: ["warehouse_clerk", "warehouse_manager", "warehouse", "ops"]
 
     # Clerks/managers can create or adjust stock only in their own location.
     - actions: ["create", "adjust"]
       effect: EFFECT_ALLOW
       roles: ["warehouse_clerk", "warehouse_manager"]
+      condition:
+        match:
+          expr: request.resource.attr.location == request.principal.attr.location
+
+    # The `warehouse` gateway role adjusts (decrements) stock, own location only.
+    - actions: ["adjust"]
+      effect: EFFECT_ALLOW
+      roles: ["warehouse"]
       condition:
         match:
           expr: request.resource.attr.location == request.principal.attr.location
