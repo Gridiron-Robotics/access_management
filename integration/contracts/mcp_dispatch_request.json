@@ -242,6 +242,65 @@
       "settings": {
         "TENANT_CLAIM_ENFORCE": false
       }
+    },
+    {
+      "approval_lookup": null,
+      "call": {
+        "actor": "aud",
+        "approval_token": "",
+        "destructive": false,
+        "module": "inventory",
+        "roles": [
+          "EXTERNAL_AUDITOR",
+          "STAFF"
+        ],
+        "tenant_id": "acme",
+        "token_tenants": [
+          "acme"
+        ],
+        "tool": "inventory.get_stock"
+      },
+      "expected": {
+        "dispatch": "EFFECT_DENY"
+      },
+      "name": "gw_auditor_with_staff_staff_tool",
+      "note": "An external auditor that also holds STAFF (every realm user inherits it from the default role) asking for a staff tool. Arrives with both roles only on the legacy header path; a verified token is already reduced to EXTERNAL_AUDITOR by scopes_from_claims. Denied either way.",
+      "request": {
+        "principal": {
+          "attr": {
+            "tenant_claim_enforce": true,
+            "tenants": [
+              "acme"
+            ]
+          },
+          "id": "aud",
+          "roles": [
+            "EXTERNAL_AUDITOR",
+            "STAFF"
+          ]
+        },
+        "resources": [
+          {
+            "actions": [
+              "dispatch"
+            ],
+            "resource": {
+              "attr": {
+                "approval_ref": "",
+                "approved": false,
+                "destructive": false,
+                "module": "inventory",
+                "tenant_id": "acme"
+              },
+              "id": "inventory.get_stock",
+              "kind": "mcp_tool"
+            }
+          }
+        ]
+      },
+      "settings": {
+        "TENANT_CLAIM_ENFORCE": true
+      }
     }
   ]
 }

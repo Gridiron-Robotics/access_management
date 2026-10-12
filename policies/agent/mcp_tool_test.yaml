@@ -54,6 +54,18 @@ principals:
     attr:
       tenant_id: tenant-a
       tool_scopes: ["inventree", "bigcapital"]
+  auditor_with_staff:        # auditor account that also inherited staff/employee
+    id: aud-s
+    roles: ["external_auditor", "staff", "employee"]
+    attr:
+      tenant_id: tenant-a
+      tool_scopes: ["inventree", "bigcapital"]
+  auditor_with_admin:        # an admin who (wrongly) also holds the auditor role
+    id: aud-a
+    roles: ["admin", "external_auditor", "employee"]
+    attr:
+      tenant_id: tenant-a
+      tool_scopes: ["inventree", "bigcapital", "payments"]
   auditor_other:             # an auditor engaged by a DIFFERENT tenant
     id: aud-b
     roles: ["external_auditor"]
@@ -362,3 +374,40 @@ tests:
       - principal: warehouse_wes
         resource: audit_sample_write
         actions: { dispatch: EFFECT_ALLOW }
+
+  - name: Holding external_auditor confines a principal to the audit reads, even with staff or admin
+    input:
+      principals: [auditor_with_staff, auditor_with_admin]
+      resources: [audit_history_read, read_tool, destructive_approved, audit_sample_write, audit_write_mislabelled]
+      actions: [dispatch, list, describe, administer]
+    expected:
+      - principal: auditor_with_staff
+        resource: audit_history_read
+        actions: { dispatch: EFFECT_ALLOW, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_staff
+        resource: read_tool
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_staff
+        resource: destructive_approved
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_staff
+        resource: audit_sample_write
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_staff
+        resource: audit_write_mislabelled
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_admin
+        resource: audit_history_read
+        actions: { dispatch: EFFECT_ALLOW, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_admin
+        resource: read_tool
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_admin
+        resource: destructive_approved
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_admin
+        resource: audit_sample_write
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_admin
+        resource: audit_write_mislabelled
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }

@@ -73,7 +73,7 @@ the derived roles below build on it.
 | `ops` (token) | operations | view/create purchase orders (not approve; submit **own**); view stock; MCP dispatch like staff, destructive tools only with a recorded approval; **not** gateway administration |
 | `hr` (token) | hr | view/edit employee records (not terminate); MCP dispatch as `ops` |
 | `warehouse` (token) | inventory | view stock, adjust **in own location**; view tenant orders/shipments; MCP dispatch as `ops`; **no finance** |
-| `external_auditor` (token) | external | **read-only, NOT staff**: dispatch of the five `audit_prep` read tools in its own tenant; nothing else, no write of any kind |
+| `external_auditor` (token) | external | **read-only, NOT staff**: dispatch of the five `audit_prep` read tools in its own tenant; nothing else, no write of any kind — even combined with any other role |
 
 (token) = **token role** (`keycloak_realm_role: true` in the catalog): also a realm
 role of the same name in Keycloak realm `erp`, which the ERP middleware reads
@@ -111,11 +111,18 @@ so a drift in either fails CI.
 
 `staff` is in the catalog because the policies grant it, but it is **not
 assigned on the access page**: every user in realm `erp` holds it through the
-realm's default role. That includes an external auditor's account unless an
-operator removes the default role from it — and a principal holding `STAFF`
-as well as `EXTERNAL_AUDITOR` is treated as staff by both the middleware's
-allowlist and these policies. Create audit-firm accounts without the default
-role.
+realm's default role — an external auditor's account included.
+
+**Holding `external_auditor` confines a principal to the five audit reads,
+whatever else it holds** (inherited `staff`, `employee`, even `admin` — an
+admin must not hold the role at all). Enforced on both sides: the middleware's
+`scopes_from_claims` reduces such a token to `EXTERNAL_AUDITOR` alone and its
+allowlist refuses everything else; `gateway_dispatch.yaml` and `mcp_tool.yaml`
+carry a DENY for any non-allowlisted or destructive tool (and for
+administer/list/describe) when the role is present. The DENY is written with
+`roles: ["*"]` and an `in request.principal.roles` test, because Cerbos
+evaluates each role separately and a DENY scoped to the auditor role alone
+would leave a staff ALLOW standing.
 
 ### Token roles: assigning them puts them in the Keycloak token
 

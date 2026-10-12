@@ -19,6 +19,8 @@ principals:
   staff_empty_tenants: {"id": "eve", "roles": ["STAFF"], "attr": {"tenants": [], "tenant_claim_enforce": false}}
   staff_header_tenant: {"id": "hal", "roles": ["STAFF"], "attr": {"tenants": ["globex"], "tenant_claim_enforce": false, "tenant_id": "acme"}}
   ops_lowercase: {"id": "low", "roles": ["ops", "staff"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  auditor_with_staff: {"id": "aud2", "roles": ["EXTERNAL_AUDITOR", "STAFF"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  auditor_with_admin: {"id": "aud3", "roles": ["ADMIN", "EXTERNAL_AUDITOR", "STAFF"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
 resources:
   read_acme: {"id": "inventory.get_stock", "kind": "mcp_tool", "attr": {"tenant_id": "acme", "module": "inventory", "destructive": false, "approved": false, "approval_ref": ""}}
   read_globex: {"id": "inventory.get_stock", "kind": "mcp_tool", "attr": {"tenant_id": "globex", "module": "inventory", "destructive": false, "approved": false, "approval_ref": ""}}
@@ -67,6 +69,15 @@ tests:
     expected:
       - principal: gw_auditor_shadow_other_tenant
         resource: gw_auditor_shadow_other_tenant
+        actions: {"dispatch": "EFFECT_DENY"}
+  - name: "Contract example gw_auditor_with_staff_staff_tool: decided as the fixture says"
+    input:
+      principals: ["gw_auditor_with_staff_staff_tool"]
+      resources: ["gw_auditor_with_staff_staff_tool"]
+      actions: ["dispatch"]
+    expected:
+      - principal: gw_auditor_with_staff_staff_tool
+        resource: gw_auditor_with_staff_staff_tool
         actions: {"dispatch": "EFFECT_DENY"}
   - name: "Staff and gateway roles dispatch a read in their own tenant only"
     input:
@@ -237,6 +248,54 @@ tests:
         resource: recording_export
         actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
       - principal: auditor_acme
+        resource: call_manifest
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+  - name: "Holding EXTERNAL_AUDITOR confines a principal to the audit reads, even with STAFF or ADMIN"
+    input:
+      principals: ["auditor_with_staff", "auditor_with_admin"]
+      resources: ["audit_read", "read_acme", "destructive_approved", "audit_write", "audit_mislabelled", "recording_export", "call_manifest"]
+      actions: ["dispatch", "administer"]
+    expected:
+      - principal: auditor_with_staff
+        resource: audit_read
+        actions: {"dispatch": "EFFECT_ALLOW", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: audit_write
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: audit_mislabelled
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: recording_export
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: call_manifest
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: audit_read
+        actions: {"dispatch": "EFFECT_ALLOW", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: audit_write
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: audit_mislabelled
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: recording_export
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
         resource: call_manifest
         actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
   - name: "Only an ADMIN of the tenant administers the gateway; ops and the other roles cannot"

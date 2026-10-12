@@ -136,6 +136,42 @@ resourcePolicy:
                     "audit_prep.get_audit_package"
                   ]
 
+    # Holding external_auditor confines a principal to the audit reads WHATEVER ELSE
+    # IT HOLDS. Every realm user inherits staff from the default role, so an
+    # audit firm's account arrives with staff too; without these DENYs the
+    # staff/admin ALLOWs would make it staff. DENY wins over every ALLOW.
+    #
+    # `roles: ["*"]` plus an `in request.principal.roles` test, NOT
+    # `roles: ["external_auditor"]`: Cerbos evaluates each of the principal's roles on
+    # its own and an ALLOW under any one role stands, so a DENY scoped to the
+    # auditor role would leave the staff role's ALLOW in force (measured).
+    - actions: ["dispatch"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: '"external_auditor" in request.principal.roles'
+              - any:
+                  of:
+                    - expr: request.resource.attr.destructive != false
+                    - expr: >-
+                        !(request.resource.attr.tool in [
+                          "audit_prep.get_entity_audit_history",
+                          "audit_prep.verify_audit_chain",
+                          "audit_prep.list_pbc_items",
+                          "audit_prep.get_tie_out_run",
+                          "audit_prep.get_audit_package"
+                        ])
+
+    - actions: ["list", "describe", "administer"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: '"external_auditor" in request.principal.roles'
+
     # Administering the gateway itself (registering servers, editing scopes).
     - actions: ["administer"]
       effect: EFFECT_ALLOW

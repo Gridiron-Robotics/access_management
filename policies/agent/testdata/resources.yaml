@@ -12,6 +12,10 @@ resources:
     attr: {approval_ref: '', approved: false, destructive: false, module: accounting, tenant_id: acme}
     id: audit_prep.get_audit_package
     kind: mcp_tool
+  gw_auditor_with_staff_staff_tool:
+    attr: {approval_ref: '', approved: false, destructive: false, module: inventory, tenant_id: acme}
+    id: inventory.get_stock
+    kind: mcp_tool
   gw_ops_release_approved:
     attr: {approval_ref: '41', approved: true, approved_by_human: true, destructive: true, module: warehouse_placement,
       tenant_id: acme}

@@ -17,6 +17,12 @@ principals:
       tenants: [globex]
     id: aud
     roles: [EXTERNAL_AUDITOR]
+  gw_auditor_with_staff_staff_tool:
+    attr:
+      tenant_claim_enforce: true
+      tenants: [acme]
+    id: aud
+    roles: [EXTERNAL_AUDITOR, STAFF]
   gw_ops_release_approved:
     attr:
       tenant_claim_enforce: true
