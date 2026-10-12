@@ -1,0 +1,247 @@
+{
+  "_contract": "The MCP dispatch request the erp_django_middleware PEP sends to the PDP (mcp_gateway/authz.py authorize_dispatch). Byte-identical copies: access_management integration/contracts/mcp_dispatch_request.json and erp_django_middleware django_middleware/tests/unit/mcp_gateway/fixtures/mcp_dispatch_request.json. The middleware's test asserts its builder emits each `request` from each `call`; access_management's tests assert policies/agent/testdata holds each request's principal/resource and gateway_dispatch_test.yaml decides `expected`. Change both repos together.",
+  "examples": [
+    {
+      "approval_lookup": {
+        "approval_ref": "41",
+        "approved": true,
+        "approved_by_human": true
+      },
+      "call": {
+        "actor": "otto",
+        "approval_token": "appr-token-1",
+        "destructive": true,
+        "module": "warehouse_placement",
+        "roles": [
+          "OPS",
+          "STAFF"
+        ],
+        "tenant_id": "acme",
+        "token_tenants": [
+          "globex",
+          "acme"
+        ],
+        "tool": "placement.release_stock"
+      },
+      "expected": {
+        "dispatch": "EFFECT_ALLOW"
+      },
+      "name": "gw_ops_release_approved",
+      "note": "OPS, own tenant, destructive tool with a recorded approval (the approval row lookup is stubbed to ref 41).",
+      "request": {
+        "principal": {
+          "attr": {
+            "tenant_claim_enforce": true,
+            "tenants": [
+              "acme",
+              "globex"
+            ]
+          },
+          "id": "otto",
+          "roles": [
+            "OPS",
+            "STAFF"
+          ]
+        },
+        "resources": [
+          {
+            "actions": [
+              "dispatch"
+            ],
+            "resource": {
+              "attr": {
+                "approval_ref": "41",
+                "approved": true,
+                "approved_by_human": true,
+                "destructive": true,
+                "module": "warehouse_placement",
+                "tenant_id": "acme"
+              },
+              "id": "placement.release_stock",
+              "kind": "mcp_tool"
+            }
+          }
+        ]
+      },
+      "settings": {
+        "TENANT_CLAIM_ENFORCE": true
+      }
+    },
+    {
+      "approval_lookup": null,
+      "call": {
+        "actor": "otto",
+        "approval_token": "",
+        "destructive": true,
+        "module": "warehouse_placement",
+        "roles": [
+          "OPS",
+          "STAFF"
+        ],
+        "tenant_id": "acme",
+        "token_tenants": [
+          "globex",
+          "acme"
+        ],
+        "tool": "placement.release_stock"
+      },
+      "expected": {
+        "dispatch": "EFFECT_DENY"
+      },
+      "name": "gw_ops_release_unapproved",
+      "note": "The same call with no approval token: the middleware sends NO `approved` key.",
+      "request": {
+        "principal": {
+          "attr": {
+            "tenant_claim_enforce": true,
+            "tenants": [
+              "acme",
+              "globex"
+            ]
+          },
+          "id": "otto",
+          "roles": [
+            "OPS",
+            "STAFF"
+          ]
+        },
+        "resources": [
+          {
+            "actions": [
+              "dispatch"
+            ],
+            "resource": {
+              "attr": {
+                "approval_ref": "",
+                "approved_by_human": false,
+                "destructive": true,
+                "module": "warehouse_placement",
+                "tenant_id": "acme"
+              },
+              "id": "placement.release_stock",
+              "kind": "mcp_tool"
+            }
+          }
+        ]
+      },
+      "settings": {
+        "TENANT_CLAIM_ENFORCE": true
+      }
+    },
+    {
+      "approval_lookup": null,
+      "call": {
+        "actor": "aud",
+        "approval_token": "",
+        "destructive": false,
+        "module": "accounting",
+        "roles": [
+          "EXTERNAL_AUDITOR"
+        ],
+        "tenant_id": "acme",
+        "token_tenants": [
+          "acme"
+        ],
+        "tool": "audit_prep.get_audit_package"
+      },
+      "expected": {
+        "dispatch": "EFFECT_ALLOW"
+      },
+      "name": "gw_auditor_package_read",
+      "note": "External auditor, own tenant, an allowlisted audit read.",
+      "request": {
+        "principal": {
+          "attr": {
+            "tenant_claim_enforce": true,
+            "tenants": [
+              "acme"
+            ]
+          },
+          "id": "aud",
+          "roles": [
+            "EXTERNAL_AUDITOR"
+          ]
+        },
+        "resources": [
+          {
+            "actions": [
+              "dispatch"
+            ],
+            "resource": {
+              "attr": {
+                "approval_ref": "",
+                "approved": false,
+                "destructive": false,
+                "module": "accounting",
+                "tenant_id": "acme"
+              },
+              "id": "audit_prep.get_audit_package",
+              "kind": "mcp_tool"
+            }
+          }
+        ]
+      },
+      "settings": {
+        "TENANT_CLAIM_ENFORCE": true
+      }
+    },
+    {
+      "approval_lookup": null,
+      "call": {
+        "actor": "aud",
+        "approval_token": "",
+        "destructive": false,
+        "module": "accounting",
+        "roles": [
+          "EXTERNAL_AUDITOR"
+        ],
+        "tenant_id": "acme",
+        "token_tenants": [
+          "globex"
+        ],
+        "tool": "audit_prep.get_audit_package"
+      },
+      "expected": {
+        "dispatch": "EFFECT_DENY"
+      },
+      "name": "gw_auditor_shadow_other_tenant",
+      "note": "Shadow mode (TENANT_CLAIM_ENFORCE off): the principal also carries the request's own tenant_id, which grants nothing; acme is not in the token's tenants.",
+      "request": {
+        "principal": {
+          "attr": {
+            "tenant_claim_enforce": false,
+            "tenant_id": "acme",
+            "tenants": [
+              "globex"
+            ]
+          },
+          "id": "aud",
+          "roles": [
+            "EXTERNAL_AUDITOR"
+          ]
+        },
+        "resources": [
+          {
+            "actions": [
+              "dispatch"
+            ],
+            "resource": {
+              "attr": {
+                "approval_ref": "",
+                "approved": false,
+                "destructive": false,
+                "module": "accounting",
+                "tenant_id": "acme"
+              },
+              "id": "audit_prep.get_audit_package",
+              "kind": "mcp_tool"
+            }
+          }
+        ]
+      },
+      "settings": {
+        "TENANT_CLAIM_ENFORCE": false
+      }
+    }
+  ]
+}

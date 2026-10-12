@@ -1,0 +1,24 @@
+# Live-shape fixtures for gateway_dispatch_test.yaml. Each entry IS the principal /
+# resource of one example in integration/contracts/mcp_dispatch_request.json
+# (integration/tests/test_gateway_contract.py fails if they differ). Do not hand-edit
+# one without the other.
+---
+resources:
+  gw_auditor_package_read:
+    attr: {approval_ref: '', approved: false, destructive: false, module: accounting, tenant_id: acme}
+    id: audit_prep.get_audit_package
+    kind: mcp_tool
+  gw_auditor_shadow_other_tenant:
+    attr: {approval_ref: '', approved: false, destructive: false, module: accounting, tenant_id: acme}
+    id: audit_prep.get_audit_package
+    kind: mcp_tool
+  gw_ops_release_approved:
+    attr: {approval_ref: '41', approved: true, approved_by_human: true, destructive: true, module: warehouse_placement,
+      tenant_id: acme}
+    id: placement.release_stock
+    kind: mcp_tool
+  gw_ops_release_unapproved:
+    attr: {approval_ref: '', approved_by_human: false, destructive: true, module: warehouse_placement,
+      tenant_id: acme}
+    id: placement.release_stock
+    kind: mcp_tool

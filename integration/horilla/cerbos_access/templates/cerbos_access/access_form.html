@@ -15,7 +15,11 @@
       <legend class="oh-label">{% trans "Baseline" %}</legend>
       {% for r in baseline_roles %}
         <label class="d-block">
+          {% if r.assignable is False %}
+          <input type="checkbox" disabled>
+          {% else %}
           <input type="checkbox" name="roles" value="{{ r.key }}" {% if r.key in selected %}checked{% endif %}>
+          {% endif %}
           <strong>{{ r.label }}</strong> — <small class="text-muted">{{ r.description }}</small>
         </label>
       {% endfor %}

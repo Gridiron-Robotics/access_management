@@ -21,6 +21,15 @@ baseline_roles:
   - key: employee
     label: Employee (baseline)
     description: Default for all staff; enables "can act on my own records".
+  - key: staff
+    label: Staff (Keycloak default — not assigned here)
+    assignable: false
+    description: >-
+      Every user in Keycloak realm erp holds the `staff` realm role through the
+      realm's default role (and the staff/admins groups); the ERP gateway reads
+      it as STAFF. Listed so the policies' `staff`/`STAFF` rules are in the
+      contract. The page shows it but cannot grant or revoke it, and the
+      Keycloak sync never touches it.
 
 # Full access to everything. Show this clearly separated and grant sparingly.
 global_roles:

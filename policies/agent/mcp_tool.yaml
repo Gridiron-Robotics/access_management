@@ -1,4 +1,10 @@
-# Agent tool dispatch — the single authorization decision for the MCP gateway.
+# Agent tool dispatch, as asked through this repo's Contract-A surface
+# (check_access & co.): lowercase catalog roles, principal tenant_id, tool_scopes.
+#
+# NOTE: this is NOT the request the ERP middleware's PEP sends. That one is kind
+# `mcp_tool` (upper-case gateway scopes, the token's `tenants`, the tool name as
+# resource id, `module`) and is decided by gateway_dispatch.yaml, pinned to the
+# middleware's builder by integration/contracts/mcp_dispatch_request.json.
 #
 # WHY THIS LIVES HERE NOW
 # --------------------

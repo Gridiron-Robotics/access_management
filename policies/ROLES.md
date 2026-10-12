@@ -95,6 +95,28 @@ assigned roles are external does **not** get the `employee` baseline
 
 ---
 
+### How these roles reach the MCP gateway policy
+
+The ERP middleware's PEP does not send catalog keys. It sends the token's
+realm roles as **gateway scopes**: upper-cased, `-` as `_`, with `erp-admin`
+-> `ADMIN` (`scopes_from_claims` in erp_django_middleware). So `ops` -> `OPS`,
+`external_auditor` -> `EXTERNAL_AUDITOR`, `staff` -> `STAFF`. Its request is
+kind `mcp_tool`: `resource.id` is the tool name, `resource.attr` has
+`tenant_id`, `module`, `destructive`, `approved`/`approval_ref` (no `approved`
+key when there is no approval), and `principal.attr.tenants` is the verified
+token's tenant groups. `policies/agent/gateway_dispatch.yaml` decides exactly
+that, requiring the resource's tenant to be IN `tenants`. One literal example
+(`integration/contracts/mcp_dispatch_request.json`) is asserted on both sides,
+so a drift in either fails CI.
+
+`staff` is in the catalog because the policies grant it, but it is **not
+assigned on the access page**: every user in realm `erp` holds it through the
+realm's default role. That includes an external auditor's account unless an
+operator removes the default role from it — and a principal holding `STAFF`
+as well as `EXTERNAL_AUDITOR` is treated as staff by both the middleware's
+allowlist and these policies. Create audit-firm accounts without the default
+role.
+
 ### Token roles: assigning them puts them in the Keycloak token
 
 Assigning a token role on the access page is the only supported way to grant

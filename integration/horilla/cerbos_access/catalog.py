@@ -16,6 +16,18 @@ BASELINE_ROLES = [
         "label": "Employee (baseline)",
         "description": "Default for all staff; enables \"can act on my own records\".",
     },
+    {
+        "key": "staff",
+        "label": "Staff (Keycloak default — not assigned here)",
+        "description": (
+            "Every user in Keycloak realm erp holds the `staff` realm role through the "
+            "realm's default role (and the staff/admins groups); the ERP gateway reads it as "
+            "STAFF. Listed so the policies' `staff`/`STAFF` rules are in the contract. The "
+            "page shows it but cannot grant or revoke it, and the Keycloak sync never touches "
+            "it."
+        ),
+        "assignable": False,
+    },
 ]
 
 
@@ -333,9 +345,15 @@ def external_role_keys():
     return frozenset(r["key"] for r in _all_roles() if r.get("external") is True)
 
 
+def non_assignable_role_keys():
+    """Catalog roles the page lists but cannot grant (`assignable: False`)."""
+    return frozenset(r["key"] for r in _all_roles() if r.get("assignable") is False)
+
+
 def valid_roles(roles):
-    """Drop anything not in the catalog (defends against tampered form posts)."""
-    allowed = all_role_keys()
+    """Drop anything not in the catalog, or not assignable here (defends against
+    tampered form posts)."""
+    allowed = all_role_keys() - non_assignable_role_keys()
     # preserve order, de-dupe
     seen, out = set(), []
     for r in roles:

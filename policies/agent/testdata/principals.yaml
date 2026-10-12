@@ -1,0 +1,31 @@
+# Live-shape fixtures for gateway_dispatch_test.yaml. Each entry IS the principal /
+# resource of one example in integration/contracts/mcp_dispatch_request.json
+# (integration/tests/test_gateway_contract.py fails if they differ). Do not hand-edit
+# one without the other.
+---
+principals:
+  gw_auditor_package_read:
+    attr:
+      tenant_claim_enforce: true
+      tenants: [acme]
+    id: aud
+    roles: [EXTERNAL_AUDITOR]
+  gw_auditor_shadow_other_tenant:
+    attr:
+      tenant_claim_enforce: false
+      tenant_id: acme
+      tenants: [globex]
+    id: aud
+    roles: [EXTERNAL_AUDITOR]
+  gw_ops_release_approved:
+    attr:
+      tenant_claim_enforce: true
+      tenants: [acme, globex]
+    id: otto
+    roles: [OPS, STAFF]
+  gw_ops_release_unapproved:
+    attr:
+      tenant_claim_enforce: true
+      tenants: [acme, globex]
+    id: otto
+    roles: [OPS, STAFF]
