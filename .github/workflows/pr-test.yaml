@@ -293,20 +293,16 @@ jobs:
           format: true
           lint: true
 
-      # The compatibility baseline is upstream Cerbos's latest release. This fork
-      # has no releases or tags of its own, so ask upstream for the tag and let
-      # buf fetch it from there rather than resolving it in the local clone.
-      - name: Find latest release
-        id: latest-release
-        run: gh release view --repo cerbos/cerbos --json tagName --jq '"tag=\(.tagName)"' >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
+      # The compatibility baseline is this PR's own base commit: "does this change
+      # break the API we already ship?". This fork was cut from upstream between
+      # releases (its protos match no upstream tag) and has no releases or tags of
+      # its own, so neither upstream's latest release nor a local tag is a valid
+      # baseline. Upstream's API changes arrive through deliberate merges.
       - name: Check backwards compatibility
         uses: cerbos/buf-breaking-action@b637955df51832cca5dd244fb3ac9ab35781cdb5 # since
         with:
-          against: https://github.com/cerbos/cerbos.git#tag=${{ steps.latest-release.outputs.tag }}
-          since: https://github.com/cerbos/cerbos.git#ref=main
+          against: ${{ github.server_url }}/${{ github.repository }}.git#ref=${{ github.event.pull_request.base.sha }}
+          since: ${{ github.server_url }}/${{ github.repository }}.git#ref=${{ github.event.pull_request.base.sha }}
 
   test-helm:
     needs: changes
