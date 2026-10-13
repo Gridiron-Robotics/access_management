@@ -7,13 +7,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"iter"
 	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	effectv1 "github.com/cerbos/cerbos/api/genpb/cerbos/effect/v1"
@@ -24,6 +25,7 @@ import (
 	"github.com/cerbos/cerbos/internal/evaluator"
 	"github.com/cerbos/cerbos/internal/namer"
 	"github.com/cerbos/cerbos/internal/observability/logging"
+	"github.com/cerbos/cerbos/internal/policy/scopeperms"
 	"github.com/cerbos/cerbos/internal/ruletable/index"
 	"github.com/cerbos/cerbos/internal/ruletable/planner"
 	"github.com/cerbos/cerbos/internal/schema"
@@ -35,6 +37,7 @@ type compilerVersionMigration func(*runtimev1.RuleTable) error
 var (
 	compilerVersionMigrations = []compilerVersionMigration{
 		migrateFromCompilerVersion0To1,
+		migrateFromCompilerVersion1To2,
 	}
 
 	compilerVersion = uint32(len(compilerVersionMigrations))
@@ -75,6 +78,37 @@ func LoadPolicies(ctx context.Context, rt *runtimev1.RuleTable, pl policyloader.
 	rt.Rules = make([]*runtimev1.RuleTable_RuleRow, 0, total)
 	for _, rules := range m {
 		rt.Rules = append(rt.Rules, rules...)
+	}
+
+	return nil
+}
+
+// LoadPoliciesIter is the streaming equivalent of LoadPolicies: it consumes compiled
+// policy sets one at a time.
+func LoadPoliciesIter(rt *runtimev1.RuleTable, policySets iter.Seq2[*runtimev1.RunnablePolicySet, error]) error {
+	return LoadPoliciesIterFunc(rt, policySets, func(row *runtimev1.RuleTable_RuleRow) error {
+		rt.Rules = append(rt.Rules, row)
+		return nil
+	})
+}
+
+// LoadPoliciesIterFunc is like LoadPoliciesIter, but each rule row is passed to onRow
+// instead of being appended to rt.Rules.
+func LoadPoliciesIterFunc(rt *runtimev1.RuleTable, policySets iter.Seq2[*runtimev1.RunnablePolicySet, error], onRow func(*runtimev1.RuleTable_RuleRow) error) error {
+	for rps, err := range policySets {
+		if err != nil {
+			return fmt.Errorf("failed to get compiled policy set: %w", err)
+		}
+
+		if rps == nil {
+			continue
+		}
+
+		for _, row := range AddPolicy(rt, rps) {
+			if err := onRow(row); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
@@ -154,8 +188,9 @@ func addPrincipalPolicy(rt *runtimev1.RuleTable, rpps *runtimev1.RunnablePrincip
 				}
 			}
 
+			// Rule names only have to be unique within a resource, so the resource is part of the key.
 			ruleFqn := namer.RuleFQN(rt.Meta[moduleID.RawValue()], p.Scope, rule.Name)
-			evaluationKey := fmt.Sprintf("%s#%s", namer.PrincipalPolicyFQN(principalID, rpps.Meta.Version, p.Scope), ruleFqn)
+			evaluationKey := fmt.Sprintf("%s#%s#%s", namer.PrincipalPolicyFQN(principalID, rpps.Meta.Version, p.Scope), ruleFqn, resource)
 
 			row := &runtimev1.RuleTable_RuleRow{
 				OriginFqn: rpps.Meta.Fqn,
@@ -180,6 +215,7 @@ func addPrincipalPolicy(rt *runtimev1.RuleTable, rpps *runtimev1.RunnablePrincip
 				EvaluationKey: evaluationKey,
 				EvaluationKeyTuple: &runtimev1.EvaluationKeyTuple{
 					Prefix:    namer.PrincipalPoliciesPrefix,
+					Resource:  resource,
 					Principal: principalID,
 					Version:   rpps.Meta.Version,
 					Scope:     p.Scope,
@@ -410,16 +446,14 @@ func addRolePolicy(rt *runtimev1.RuleTable, p *runtimev1.RunnableRolePolicySet) 
 					OrderedVariables: p.OrderedVariables,
 					Constants:        p.Constants,
 				},
-				EvaluationKey: fmt.Sprintf("%s#%s_rule-%03d", namer.PolicyKeyFromFQN(namer.RolePolicyFQN(p.Role, p.Meta.Version, p.Scope)), p.Role, idx),
-				// idx restarts at 0 for each resource, and the resource itself is left
-				// out of the key on purpose so this stays identical to the legacy
-				// evaluation_key string.
+				EvaluationKey: fmt.Sprintf("%s#%s_%s_rule-%03d", namer.PolicyKeyFromFQN(namer.RolePolicyFQN(p.Role, p.Meta.Version, p.Scope)), p.Role, resource, idx),
 				EvaluationKeyTuple: &runtimev1.EvaluationKeyTuple{
-					Prefix:  namer.RolePoliciesPrefix,
-					Role:    p.Role,
-					Version: p.Meta.Version,
-					Scope:   p.Scope,
-					RuleId:  uint32(idx), //nolint:gosec
+					Prefix:   namer.RolePoliciesPrefix,
+					Resource: resource,
+					Role:     p.Role,
+					Version:  p.Meta.Version,
+					Scope:    p.Scope,
+					RuleId:   uint32(idx), //nolint:gosec
 				},
 				PolicyKind:     policyv1.Kind_KIND_RESOURCE,
 				FromRolePolicy: true,
@@ -468,6 +502,7 @@ type RuleTable struct {
 	idx                   *index.Index
 	principalScopeMap     map[string]struct{}
 	resourceScopeMap      map[string]struct{}
+	scopePermsTracker     *scopeperms.Tracker
 	scopeScopePermissions map[string]policyv1.ScopePermissions
 	policyDerivedRoles    map[namer.ModuleID]map[string]*WrappedRunnableDerivedRole
 	programCache          *ProgramCache
@@ -527,12 +562,14 @@ func (c *ProgramCache) GetOrCreate(expr *runtimev1.Expr) (cel.Program, error) {
 }
 
 func compileFromSource(src string) (cel.Program, error) {
-	ast, iss := conditions.StdEnv.Compile(src)
+	ast, iss := conditions.Compile(src)
 	if iss != nil && iss.Err() != nil {
 		return nil, iss.Err()
 	}
+
 	return conditions.StdEnv.Program(
 		ast,
+		cel.EvalOptions(cel.OptOptimize),
 		cel.CustomDecorator(conditions.CacheFriendlyTimeDecorator()),
 	)
 }
@@ -603,8 +640,8 @@ func paceBuildGC() (restore func()) {
 func NewRuleTableFromLoader(ctx context.Context, policyLoader policyloader.PolicyLoader) (*RuleTable, error) {
 	defer paceBuildGC()()
 
-	if spl, ok := policyLoader.(policyloader.StreamingPolicyLoader); ok {
-		return newRuleTableFromStreamingLoader(ctx, spl)
+	if spl, ok := policyLoader.(policyloader.IterablePolicyLoader); ok {
+		return newRuleTableFromIterableLoader(ctx, spl)
 	}
 
 	protoRT := NewProtoRuletable()
@@ -616,7 +653,7 @@ func NewRuleTableFromLoader(ctx context.Context, policyLoader policyloader.Polic
 	return NewRuleTable(protoRT)
 }
 
-func newRuleTableFromStreamingLoader(ctx context.Context, spl policyloader.StreamingPolicyLoader) (*RuleTable, error) {
+func newRuleTableFromIterableLoader(ctx context.Context, spl policyloader.IterablePolicyLoader) (*RuleTable, error) {
 	rt := &RuleTable{
 		RuleTable:     NewProtoRuletable(),
 		idx:           index.New(),
@@ -625,8 +662,18 @@ func newRuleTableFromStreamingLoader(ctx context.Context, spl policyloader.Strea
 	}
 	rt.initBuildState()
 
-	if err := spl.GetAllStreaming(ctx, rt.ingestPolicy); err != nil {
-		return nil, fmt.Errorf("failed to load policies: %w", err)
+	for rps, err := range spl.Iter(ctx) {
+		if err != nil {
+			return nil, fmt.Errorf("failed to load policies due to compilation failure: %w", err)
+		}
+
+		if err := rt.ingestPolicy(rps); err != nil {
+			return nil, fmt.Errorf("failed to load policies: %w", err)
+		}
+	}
+
+	if err := rt.scopePermsTracker.Err(); err != nil {
+		return nil, err
 	}
 
 	rt.finalizeBuild()
@@ -663,6 +710,10 @@ func (rt *RuleTable) init(protoRT *runtimev1.RuleTable) error {
 		return err
 	}
 
+	if err := rt.scopePermsTracker.Err(); err != nil {
+		return err
+	}
+
 	rt.finalizeBuild()
 
 	return nil
@@ -672,6 +723,7 @@ func (rt *RuleTable) initBuildState() {
 	rt.policyDerivedRoles = make(map[namer.ModuleID]map[string]*WrappedRunnableDerivedRole)
 	rt.principalScopeMap = make(map[string]struct{})
 	rt.resourceScopeMap = make(map[string]struct{})
+	rt.scopePermsTracker = scopeperms.NewTracker()
 	rt.scopeScopePermissions = make(map[string]policyv1.ScopePermissions)
 }
 
@@ -774,8 +826,9 @@ func (rt *RuleTable) indexRules(rules []*runtimev1.RuleTable_RuleRow) error {
 			}
 		}
 
-		if rule.ScopePermissions != policyv1.ScopePermissions_SCOPE_PERMISSIONS_UNSPECIFIED {
-			rt.scopeScopePermissions[rule.Scope] = rule.ScopePermissions
+		if !rule.FromRolePolicy {
+			rt.scopePermsTracker.Add(rule.PolicyKind, namer.PolicyKeyFromFQN(rule.OriginFqn), rule.Scope, rule.ScopePermissions)
+			rt.scopeScopePermissions[rule.Scope] = scopeperms.Normalise(rule.ScopePermissions)
 		}
 
 		switch rule.PolicyKind { //nolint:exhaustive
@@ -903,6 +956,39 @@ func (rt *RuleTable) GetScopeScopePermissions(scope string) policyv1.ScopePermis
 	return rt.scopeScopePermissions[scope]
 }
 
+// checkScopePermissions reports an error if adding the policy set would make the scope permissions of its scope
+// inconsistent with the policies already in the table. The policy identified by ignoredPolicyKey is not considered.
+func (rt *RuleTable) checkScopePermissions(rps *runtimev1.RunnablePolicySet, ignoredPolicyKey string) error {
+	var (
+		kind  policyv1.Kind
+		scope string
+		sp    policyv1.ScopePermissions
+	)
+
+	switch ps := rps.GetPolicySet().(type) {
+	case *runtimev1.RunnablePolicySet_ResourcePolicy:
+		policies := ps.ResourcePolicy.GetPolicies()
+		if len(policies) == 0 {
+			return nil
+		}
+		kind, scope, sp = policyv1.Kind_KIND_RESOURCE, policies[0].GetScope(), policies[0].GetScopePermissions()
+	case *runtimev1.RunnablePolicySet_PrincipalPolicy:
+		policies := ps.PrincipalPolicy.GetPolicies()
+		if len(policies) == 0 {
+			return nil
+		}
+		kind, scope, sp = policyv1.Kind_KIND_PRINCIPAL, policies[0].GetScope(), policies[0].GetScopePermissions()
+	default:
+		return nil
+	}
+
+	if c := rt.scopePermsTracker.Check(kind, namer.PolicyKeyFromFQN(rps.GetFqn()), scope, sp, ignoredPolicyKey); c != nil {
+		return &scopeperms.ConflictsError{Conflicts: []scopeperms.Conflict{*c}}
+	}
+
+	return nil
+}
+
 func (rt *RuleTable) GetSchema(fqn string) *policyv1.Schemas {
 	modID := namer.GenModuleIDFromFQN(fqn)
 	if s, ok := rt.Schemas[modID.RawValue()]; ok {
@@ -960,5 +1046,36 @@ func migrate(rt *runtimev1.RuleTable) error {
 
 func migrateFromCompilerVersion0To1(rt *runtimev1.RuleTable) error {
 	conditions.WalkExprs(rt, conditions.MigrateVariablesType)
+	return nil
+}
+
+// migrateFromCompilerVersion1To2 adds the resource to role and principal policy evaluation keys.
+// Role policy rule indices restart for each resource, and principal policy rule names only have
+// to be unique within a resource, so without it rules for different resources (e.g. "*" and a
+// literal kind) could share a key and therefore a condition cache entry.
+func migrateFromCompilerVersion1To2(rt *runtimev1.RuleTable) error {
+	for _, row := range rt.Rules {
+		switch {
+		case row.FromRolePolicy:
+			// "<policy key>#<role>_rule-NNN" becomes "<policy key>#<role>_<resource>_rule-NNN".
+			if i := strings.LastIndex(row.EvaluationKey, "_rule-"); i >= 0 {
+				row.EvaluationKey = row.EvaluationKey[:i] + "_" + row.Resource + row.EvaluationKey[i:]
+			}
+		case row.PolicyKind == policyv1.Kind_KIND_PRINCIPAL:
+			// The row only has the sanitized resource, so rules for resources that only differ
+			// in sanitized characters still share a key until the rule table is rebuilt.
+			// Rows of principal policies without rules have no key.
+			if row.EvaluationKey != "" {
+				row.EvaluationKey += "#" + row.Resource
+			}
+		default:
+			continue
+		}
+
+		if t := row.EvaluationKeyTuple; t != nil {
+			t.Resource = row.Resource
+		}
+	}
+
 	return nil
 }

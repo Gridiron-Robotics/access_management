@@ -9,12 +9,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 
 	"go.uber.org/zap"
 
 	auditv1 "github.com/cerbos/cerbos/api/genpb/cerbos/audit/v1"
 	runtimev1 "github.com/cerbos/cerbos/api/genpb/cerbos/runtime/v1"
-	"github.com/cerbos/cerbos/internal/config"
 	"github.com/cerbos/cerbos/internal/namer"
 	"github.com/cerbos/cerbos/internal/observability/metrics"
 	"github.com/cerbos/cerbos/internal/policy"
@@ -26,17 +26,11 @@ type Manager struct {
 	log   *zap.SugaredLogger
 }
 
-func NewManager(ctx context.Context, store storage.SourceStore) (*Manager, error) {
-	if err := config.GetSection(&Conf{}); err != nil {
-		return nil, err
-	}
-
-	c := &Manager{
+func NewManager(store storage.SourceStore) *Manager {
+	return &Manager{
 		log:   zap.S().Named("compiler"),
 		store: store,
 	}
-
-	return c, nil
 }
 
 func (c *Manager) compile(unit *policy.CompilationUnit) (*runtimev1.RunnablePolicySet, error) {
@@ -90,41 +84,59 @@ func (c *Manager) GetAll(ctx context.Context) ([]*runtimev1.RunnablePolicySet, e
 	return rpsSet, nil
 }
 
-// GetAllStreaming compiles compilation units one at a time and yields each compiled
-// policy set.
-func (c *Manager) GetAllStreaming(ctx context.Context, yield func(*runtimev1.RunnablePolicySet) error) error {
-	compileAndYield := func(cu *policy.CompilationUnit) error {
-		rps, err := c.compile(cu)
+func (c *Manager) Iter(ctx context.Context) iter.Seq2[*runtimev1.RunnablePolicySet, error] {
+	return func(yield func(*runtimev1.RunnablePolicySet, error) bool) {
+		if iterable, ok := c.store.(storage.IterableSourceStore); ok {
+			for unit, err := range iterable.Iter(ctx) {
+				if err != nil {
+					yield(nil, fmt.Errorf("failed to get compilation units: %w", err))
+					return
+				}
+
+				rps, err := c.compile(unit)
+				if err != nil {
+					err = PolicyCompilationErr{underlying: err}
+				}
+
+				if !yield(rps, err) {
+					return
+				}
+			}
+
+			return
+		}
+
+		units, err := c.store.GetAll(ctx)
 		if err != nil {
-			return PolicyCompilationErr{underlying: err}
+			yield(nil, fmt.Errorf("failed to get compilation units: %w", err))
+			return
 		}
 
-		if rps == nil {
-			return nil
+		for i, unit := range units {
+			rps, err := c.compile(unit)
+			if err != nil {
+				err = PolicyCompilationErr{underlying: err}
+			}
+
+			if !yield(rps, err) {
+				return
+			}
+
+			// Drop it as soon as it is compiled.
+			units[i] = nil
 		}
-
-		return yield(rps)
 	}
+}
 
-	if ss, ok := c.store.(storage.StreamingSourceStore); ok {
-		return ss.GetAllStreaming(ctx, compileAndYield)
-	}
-
-	cus, err := c.store.GetAll(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get compilation units: %w", err)
-	}
-
-	for i, cu := range cus {
-		if err := compileAndYield(cu); err != nil {
-			return err
+func (c *Manager) CompileAll(ctx context.Context) error {
+	errs := newErrorSet()
+	for _, err := range c.Iter(ctx) {
+		if err != nil {
+			errs.Add(err)
 		}
-
-		// Drop it as soon as it is compiled.
-		cus[i] = nil
 	}
 
-	return nil
+	return errs.ErrOrNil()
 }
 
 func (c *Manager) GetAllMatching(ctx context.Context, modIDs []namer.ModuleID) ([]*runtimev1.RunnablePolicySet, error) {
@@ -191,5 +203,6 @@ func (pce PolicyCompilationErr) Unwrap() error {
 }
 
 func (pce PolicyCompilationErr) Is(target error) bool {
-	return errors.As(target, &PolicyCompilationErr{})
+	_, ok := errors.AsType[PolicyCompilationErr](target)
+	return ok
 }
