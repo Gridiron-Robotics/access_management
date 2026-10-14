@@ -18,6 +18,20 @@ principals:
     attr:
       department: engineering
 
+  hr_hal:          # ERP-gateway HR role
+    id: hal
+    roles: ["hr", "employee"]
+    attr:
+      department: hr
+  ops_otto:
+    id: otto
+    roles: ["ops", "employee"]
+  warehouse_wes:
+    id: wes
+    roles: ["warehouse", "employee"]
+  auditor_aud:     # external auditor — NOT staff, so not an `owner` either
+    id: aud
+    roles: ["external_auditor"]
 resources:
   emma_record:
     id: rec-emma
@@ -32,6 +46,12 @@ resources:
       owner: bob
       department: engineering
 
+  aud_record:
+    id: rec-aud
+    kind: "hr:employee_record"
+    attr:
+      owner: aud
+      department: engineering
 tests:
   - name: HR specialist can view and edit records but not terminate
     input:
@@ -73,3 +93,42 @@ tests:
         actions:
           view: EFFECT_DENY
           edit: EFFECT_DENY
+
+  - name: HR role views and edits employee records but cannot terminate
+    input:
+      principals: [hr_hal]
+      resources: [bob_record, emma_record]
+      actions: [view, edit, terminate]
+    expected:
+      - principal: hr_hal
+        resource: bob_record
+        actions: { view: EFFECT_ALLOW, edit: EFFECT_ALLOW, terminate: EFFECT_DENY }
+      - principal: hr_hal
+        resource: emma_record
+        actions: { view: EFFECT_ALLOW, edit: EFFECT_ALLOW, terminate: EFFECT_DENY }
+
+  - name: Ops and warehouse roles have no HR access
+    input:
+      principals: [ops_otto, warehouse_wes]
+      resources: [bob_record]
+      actions: [view, edit, terminate]
+    expected:
+      - principal: ops_otto
+        resource: bob_record
+        actions: { view: EFFECT_DENY, edit: EFFECT_DENY, terminate: EFFECT_DENY }
+      - principal: warehouse_wes
+        resource: bob_record
+        actions: { view: EFFECT_DENY, edit: EFFECT_DENY, terminate: EFFECT_DENY }
+
+  - name: External auditor is denied every HR action, even on a record naming it as owner
+    input:
+      principals: [auditor_aud]
+      resources: [bob_record, aud_record]
+      actions: [view, edit, terminate]
+    expected:
+      - principal: auditor_aud
+        resource: bob_record
+        actions: { view: EFFECT_DENY, edit: EFFECT_DENY, terminate: EFFECT_DENY }
+      - principal: auditor_aud
+        resource: aud_record
+        actions: { view: EFFECT_DENY, edit: EFFECT_DENY, terminate: EFFECT_DENY }

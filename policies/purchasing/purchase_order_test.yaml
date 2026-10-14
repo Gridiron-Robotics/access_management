@@ -13,6 +13,15 @@ principals:
     attr:
       department: purchasing
 
+  ops_otto:        # ERP-gateway OPS role
+    id: otto
+    roles: ["ops", "employee"]
+  warehouse_wes:
+    id: wes
+    roles: ["warehouse", "employee"]
+  auditor_aud:     # external auditor — NOT staff
+    id: aud
+    roles: ["external_auditor"]
 resources:
   small_po:
     id: po-001
@@ -27,6 +36,12 @@ resources:
       owner: ben
       amount: 100000
 
+  otto_po:
+    id: po-003
+    kind: "purchasing:purchase_order"
+    attr:
+      owner: otto
+      amount: 5000
 tests:
   - name: Buyer can create and submit their own PO but not approve
     input:
@@ -56,3 +71,39 @@ tests:
         resource: large_po
         actions:
           approve: EFFECT_DENY
+
+  - name: Ops role views and raises POs, submits only its own, never approves
+    input:
+      principals: [ops_otto]
+      resources: [small_po, otto_po]
+      actions: [view, create, submit, approve]
+    expected:
+      - principal: ops_otto
+        resource: small_po
+        actions: { view: EFFECT_ALLOW, create: EFFECT_ALLOW, submit: EFFECT_DENY, approve: EFFECT_DENY }
+      - principal: ops_otto
+        resource: otto_po
+        actions: { view: EFFECT_ALLOW, create: EFFECT_ALLOW, submit: EFFECT_ALLOW, approve: EFFECT_DENY }
+
+  - name: Warehouse role has no purchasing access
+    input:
+      principals: [warehouse_wes]
+      resources: [small_po]
+      actions: [view, create, submit, approve]
+    expected:
+      - principal: warehouse_wes
+        resource: small_po
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, submit: EFFECT_DENY, approve: EFFECT_DENY }
+
+  - name: External auditor is denied every purchasing action
+    input:
+      principals: [auditor_aud]
+      resources: [small_po, large_po]
+      actions: [view, create, submit, approve]
+    expected:
+      - principal: auditor_aud
+        resource: small_po
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, submit: EFFECT_DENY, approve: EFFECT_DENY }
+      - principal: auditor_aud
+        resource: large_po
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, submit: EFFECT_DENY, approve: EFFECT_DENY }

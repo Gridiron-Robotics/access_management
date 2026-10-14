@@ -1,0 +1,195 @@
+# MCP gateway dispatch: the request the ERP middleware's PEP ACTUALLY sends.
+#
+# WHY THIS FILE EXISTS NEXT TO mcp_tool.yaml
+# ------------------------------------------
+# `agent:mcp_tool` (mcp_tool.yaml) is written against a request shape no
+# caller sends live: lowercase roles, `principal.attr.tenant_id`,
+# `principal.attr.tool_scopes`, `resource.attr.server`/`tool`. The middleware's
+# PEP (erp_django_middleware django_middleware/mcp_gateway/authz.py,
+# `authorize_dispatch` -> `CerbosAuthorizer.is_allowed`) sends instead:
+#
+#   resource.kind                  "mcp_tool"
+#   resource.id                    the tool name, e.g. "placement.release_stock"
+#   resource.attr.tenant_id        the tenant the CALL targets
+#   resource.attr.module           the tool's module (there is no `server`)
+#   resource.attr.destructive      the tool's destructiveHint
+#   resource.attr.approved / approved_by_human / approval_ref
+#                                  from the stored DispatchApproval row; for no
+#                                  approval: approved_by_human false, ref "",
+#                                  and NO `approved` key at all
+#   principal.roles                gateway scopes: the token's realm roles
+#                                  upper-cased, `-` as `_` (erp-admin -> ADMIN,
+#                                  staff -> STAFF, ops -> OPS, ...)
+#   principal.attr.tenants         the VERIFIED token's /tenants/<id> groups
+#   principal.attr.tenant_claim_enforce, and in shadow mode tenant_id
+#                                  -- both IGNORED here (see TENANT)
+#
+# This policy decides that request. It is pinned to the middleware's builder by
+# one literal example (integration/contracts/mcp_dispatch_request.json, copied
+# byte for byte to the middleware's tests/unit/mcp_gateway/fixtures/): the
+# middleware asserts its builder emits it, this repo asserts the fixtures in
+# testdata/ are it and that gateway_dispatch_test.yaml decides it.
+#
+# TENANT: membership, always. The resource's tenant must be IN the principal's
+# token tenants. No shadow-mode bypass, no fall-back to a principal tenant_id
+# (that is the request's own header — the tautology the middleware removed),
+# no tenant-free ADMIN wildcard. A principal with no `tenants` (no verified
+# token) is denied everything: fail closed.
+#
+# PER-TOOL SCOPES are not re-checked here: the middleware sends none, and its
+# registry enforces each tool's declared scopes in-process right after this
+# decision. This policy is the tenant + role-class + approval gate, plus the
+# exact external_auditor allowlist, by tool name.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "mcp_tool"
+  version: "default"
+  variables:
+    local:
+      tenant_member: >-
+        has(request.principal.attr.tenants)
+        && request.resource.attr.tenant_id in request.principal.attr.tenants
+      approved: >-
+        has(request.resource.attr.approved)
+        && request.resource.attr.approved == true
+        && has(request.resource.attr.approval_ref)
+        && size(request.resource.attr.approval_ref) > 0
+  rules:
+    # Non-destructive dispatch: staff and the gateway roles, own tenant.
+    - actions: ["dispatch"]
+      effect: EFFECT_ALLOW
+      roles: ["ADMIN", "STAFF", "OPS", "HR", "WAREHOUSE"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: V.tenant_member
+              - expr: request.resource.attr.destructive == false
+
+    # Destructive dispatch: the same roles, own tenant, AND a recorded human
+    # approval (a non-empty approval_ref naming the DispatchApproval row).
+    - actions: ["dispatch"]
+      effect: EFFECT_ALLOW
+      roles: ["ADMIN", "STAFF", "OPS", "HR", "WAREHOUSE"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: V.tenant_member
+              - expr: request.resource.attr.destructive == true
+              - expr: V.approved
+
+    # Explicit DENY for a destructive call without an approval, whoever asks.
+    # Deny-by-default already gives this answer; the rule makes a later broad
+    # ALLOW a test failure instead of a silent hole. Written with has() because
+    # the middleware sends NO `approved` key when there is no approval.
+    - actions: ["dispatch"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: request.resource.attr.destructive == true
+              - expr: "!V.approved"
+
+    # External auditor: the five audit_prep read tools the middleware
+    # allowlists for EXTERNAL_AUDITOR (mcp_gateway/services.py
+    # EXTERNAL_ROLE_TOOLS), own tenant, never destructive.
+    - actions: ["dispatch"]
+      effect: EFFECT_ALLOW
+      roles: ["EXTERNAL_AUDITOR"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: V.tenant_member
+              - expr: request.resource.attr.destructive == false
+              - expr: >-
+                  request.resource.id in [
+                    "audit_prep.get_entity_audit_history",
+                    "audit_prep.verify_audit_chain",
+                    "audit_prep.list_pbc_items",
+                    "audit_prep.get_tie_out_run",
+                    "audit_prep.get_audit_package"
+                  ]
+
+    # Holding EXTERNAL_AUDITOR confines a principal to the audit reads WHATEVER ELSE
+    # IT HOLDS. Every realm user inherits staff from the default role, so an
+    # audit firm's account arrives with staff too; without these DENYs the
+    # staff/admin ALLOWs would make it staff. DENY wins over every ALLOW.
+    #
+    # `roles: ["*"]` plus an `in request.principal.roles` test, NOT
+    # `roles: ["EXTERNAL_AUDITOR"]`: Cerbos evaluates each of the principal's roles on
+    # its own and an ALLOW under any one role stands, so a DENY scoped to the
+    # auditor role would leave the staff role's ALLOW in force (measured).
+    - actions: ["dispatch"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: '"EXTERNAL_AUDITOR" in request.principal.roles'
+              - any:
+                  of:
+                    - expr: request.resource.attr.destructive != false
+                    - expr: >-
+                        !(request.resource.id in [
+                          "audit_prep.get_entity_audit_history",
+                          "audit_prep.verify_audit_chain",
+                          "audit_prep.list_pbc_items",
+                          "audit_prep.get_tie_out_run",
+                          "audit_prep.get_audit_package"
+                        ])
+
+    - actions: ["administer"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: '"EXTERNAL_AUDITOR" in request.principal.roles'
+
+    # ── Call audio (ported from the middleware's foundation policy) ─────────
+    # A recording is unredacted PII, so export and releasing a legal hold need
+    # DIRECTOR or ADMIN. DENY overrides every ALLOW above.
+    - actions: ["dispatch"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: >-
+                  request.resource.id in
+                  ["telephony.request_recording_export", "telephony.release_legal_hold"]
+              - expr: '!("DIRECTOR" in request.principal.roles)'
+              - expr: '!("ADMIN" in request.principal.roles)'
+
+    # Reading call metadata (and placing a hold) is open to support leads and
+    # managers too, own tenant. Destructiveness is still decided by the rules
+    # above: place_legal_hold is non-destructive in the registry.
+    - actions: ["dispatch"]
+      effect: EFFECT_ALLOW
+      roles: ["SUPPORT_LEAD", "MANAGER", "DIRECTOR"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: >-
+                  request.resource.id in
+                  ["telephony.get_call_recording_manifest",
+                   "telephony.list_call_segments",
+                   "telephony.place_legal_hold"]
+              - expr: V.tenant_member
+              - expr: request.resource.attr.destructive == false
+
+    # Gateway administration (registering servers, editing scopes): ADMIN of
+    # this tenant only.
+    - actions: ["administer"]
+      effect: EFFECT_ALLOW
+      roles: ["ADMIN"]
+      condition:
+        match:
+          expr: V.tenant_member

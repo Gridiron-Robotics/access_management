@@ -70,6 +70,20 @@ the derived roles below build on it.
 | `purchasing_manager` | purchasing | approve POs **≤ $25,000** |
 | `operator` | manufacturing | view; start/complete **on own line** |
 | `supervisor` | manufacturing | + start/complete any line, cancel |
+| `ops` (token) | operations | view/create purchase orders (not approve; submit **own**); view stock; MCP dispatch like staff, destructive tools only with a recorded approval; **not** gateway administration |
+| `hr` (token) | hr | view/edit employee records (not terminate); MCP dispatch as `ops` |
+| `warehouse` (token) | inventory | view stock, adjust **in own location**; view tenant orders/shipments; MCP dispatch as `ops`; **no finance** |
+| `external_auditor` (token) | external | **read-only, NOT staff**: dispatch of the five `audit_prep` read tools in its own tenant; nothing else, no write of any kind — even combined with any other role |
+
+(token) = **token role** (`keycloak_realm_role: true` in the catalog): also a realm
+role of the same name in Keycloak realm `erp`, which the ERP middleware reads
+as the scope `OPS` / `HR` / `WAREHOUSE` / `EXTERNAL_AUDITOR`. The middleware
+defines these realm roles (`keycloak/import/erp-realm.json`); **this repo
+assigns them** — see "Token roles" below.
+
+`external_auditor` is for people outside the company. An employee whose only
+assigned roles are external does **not** get the `employee` baseline
+(`cerbos_access/principal.py`), so no ownership rule can open a write to them.
 
 **Derived roles** (computed by Cerbos, never assigned directly — defined in
 `_common/derived_roles.yaml`):
@@ -78,6 +92,60 @@ the derived roles below build on it.
 |--------------|--------------|---------|
 | `owner` | `resource.attr.owner == principal.id` (and has `employee`) | finance, hr, sales, purchasing |
 | `same_department` | `resource.attr.department == principal.attr.department` | available for future rules |
+
+---
+
+### How these roles reach the MCP gateway policy
+
+The ERP middleware's PEP does not send catalog keys. It sends the token's
+realm roles as **gateway scopes**: upper-cased, `-` as `_`, with `erp-admin`
+-> `ADMIN` (`scopes_from_claims` in erp_django_middleware). So `ops` -> `OPS`,
+`external_auditor` -> `EXTERNAL_AUDITOR`, `staff` -> `STAFF`. Its request is
+kind `mcp_tool`: `resource.id` is the tool name, `resource.attr` has
+`tenant_id`, `module`, `destructive`, `approved`/`approval_ref` (no `approved`
+key when there is no approval), and `principal.attr.tenants` is the verified
+token's tenant groups. `policies/agent/gateway_dispatch.yaml` decides exactly
+that, requiring the resource's tenant to be IN `tenants`. One literal example
+(`integration/contracts/mcp_dispatch_request.json`) is asserted on both sides,
+so a drift in either fails CI.
+
+`staff` is in the catalog because the policies grant it, but it is **not
+assigned on the access page**: every user in realm `erp` holds it through the
+realm's default role — an external auditor's account included.
+
+**Holding `external_auditor` confines a principal to the five audit reads,
+whatever else it holds** (inherited `staff`, `employee`, even `admin` — an
+admin must not hold the role at all). Enforced on both sides: the middleware's
+`scopes_from_claims` reduces such a token to `EXTERNAL_AUDITOR` alone and its
+allowlist refuses everything else; `gateway_dispatch.yaml` and `mcp_tool.yaml`
+carry a DENY for any non-allowlisted or destructive tool (and for
+administer/list/describe) when the role is present. The DENY is written with
+`roles: ["*"]` and an `in request.principal.roles` test, because Cerbos
+evaluates each role separately and a DENY scoped to the auditor role alone
+would leave a staff ALLOW standing.
+
+### Token roles: assigning them puts them in the Keycloak token
+
+Assigning a token role on the access page is the only supported way to grant
+it. On every save of an `EmployeeAccess` record the Horilla app pushes the
+change to Keycloak after the transaction commits
+(`integration/horilla/cerbos_access/keycloak_sync.py`); a full reconcile is
+`python manage.py sync_keycloak_roles [--dry-run]`.
+
+- **Scope of the sync:** only catalog roles marked `keycloak_realm_role: true`.
+  Any other realm role a user holds is never added or removed. Holders of a
+  token role that the page does not know (service accounts, hand grants) are
+  reported by the reconcile and left unchanged.
+- **Matching:** employee → Keycloak user by **email** (exact, exactly one
+  match). No match or several are reported; users are never created.
+- **Config (env):** `KEYCLOAK_ADMIN_URL`, `KEYCLOAK_ADMIN_REALM` (default `erp`),
+  `KEYCLOAK_ADMIN_CLIENT_ID`, `KEYCLOAK_ADMIN_CLIENT_SECRET` — a service account
+  holding only `realm-management` `manage-users` and `view-realm`. Unset: the
+  save is a logged no-op, the command exits non-zero.
+- **Failure:** a Keycloak error on save is logged and the record stays saved —
+  the next reconcile repairs the token. On the command it exits non-zero.
+- Removing a role takes effect in new tokens; an access token already issued
+  keeps it until it expires (30 minutes in realm `erp`).
 
 ---
 

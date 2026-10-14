@@ -20,7 +20,7 @@ resourcePolicy:
   rules:
     - actions: ["view", "list", "track"]
       effect: EFFECT_ALLOW
-      roles: ["support_agent", "warehouse_clerk", "sales_rep", "agent_operator", "admin"]
+      roles: ["support_agent", "warehouse_clerk", "warehouse", "sales_rep", "agent_operator", "admin"]
       condition:
         match:
           expr: request.resource.attr.tenant_id == request.principal.attr.tenant_id

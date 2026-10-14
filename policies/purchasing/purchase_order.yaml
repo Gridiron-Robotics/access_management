@@ -8,9 +8,11 @@ resourcePolicy:
   importDerivedRoles:
     - common_erp_roles
   rules:
+    # `ops` is the ERP-gateway token role (OPS scope: purchasing, receiving).
+    # It raises POs; approval stays with the purchasing manager.
     - actions: ["view", "create"]
       effect: EFFECT_ALLOW
-      roles: ["buyer", "purchasing_manager"]
+      roles: ["buyer", "purchasing_manager", "ops"]
 
     # The buyer who created the PO can submit it for approval.
     - actions: ["submit"]

@@ -279,17 +279,16 @@
     },
     "mcp": {
       "additionalProperties": false,
-      "description": "Contract-A MCP sidecar (integration/mcp/server.py). A separate Deployment + Service from the Cerbos PDP, disabled by default so a default render stays byte-identical to upstream.",
+      "description": "Contract-A MCP sidecar (integration/mcp/server.py) — the agent-plane surface\nthat answers \"may this principal do that?\" before an action is planned. A\nSEPARATE Deployment + Service from the Cerbos PDP on purpose: the PDP is\nupstream Cerbos (Go) and is not ours to modify, so the sidecar can be\nrestarted or removed without touching the engine every enforcing service\ndepends on. Disabled by default so a default render is byte-identical to\nupstream. See deploy/charts/cerbos/values-mcp.yaml for an enabled example.",
       "properties": {
         "enabled": {
           "default": false,
-          "description": "Render the MCP sidecar Deployment + Service.",
-          "required": [],
+          "description": "Render the MCP sidecar Deployment + Service. Off by default.",
           "title": "enabled",
           "type": "boolean"
         },
         "env": {
-          "description": "Extra environment variables for the sidecar (e.g. OTEL_*).",
+          "description": "Extra environment variables for the sidecar (e.g. OTEL_* exporter settings).",
           "items": {
             "additionalProperties": true,
             "required": [],
@@ -304,7 +303,7 @@
         },
         "existingSecret": {
           "default": "",
-          "description": "Name of a pre-created Secret holding ACCESS_MCP_TOKEN. Required when enabled; the chart fails to render without it. No token value ever lives in these values.",
+          "description": "Name of a PRE-CREATED Secret holding ACCESS_MCP_TOKEN. REQUIRED when\nmcp.enabled — the chart fails to render without it. No token value ever\nlives in these values.\n  kubectl create secret generic access-mcp --from-literal=ACCESS_MCP_TOKEN=...",
           "required": [],
           "title": "existingSecret",
           "type": [
@@ -314,11 +313,11 @@
         },
         "image": {
           "additionalProperties": false,
-          "description": "Sidecar image details (built from deploy/mcp/Dockerfile). Pin an exact tag.",
+          "description": "Sidecar image, built from deploy/mcp/Dockerfile. Pin an exact tag; a\nfloating one makes the deploy unreproducible.",
           "properties": {
             "digest": {
               "default": "",
-              "description": "Image digest. Takes precedence over tag if set.",
+              "description": "Image digest to use. Takes precedence over tag if specified.",
               "required": [],
               "title": "digest",
               "type": [
@@ -348,7 +347,7 @@
             },
             "tag": {
               "default": "",
-              "description": "Image tag.",
+              "description": "Image tag to use.",
               "required": [],
               "title": "tag",
               "type": [
@@ -372,15 +371,13 @@
         },
         "port": {
           "default": 8085,
-          "description": "Port the MCP surface listens on (Contract-A fixes this at 8085).",
-          "required": [],
+          "description": "Port the MCP surface listens on. Contract-A fixes this at 8085.",
           "title": "port",
           "type": "integer"
         },
         "replicaCount": {
           "default": 1,
-          "description": "Number of sidecar pods.",
-          "required": [],
+          "description": "Number of sidecar pods to run.",
           "title": "replicaCount",
           "type": "integer"
         },
@@ -410,8 +407,7 @@
           "properties": {
             "name": {
               "default": "access-management-mcp",
-              "description": "Service name. The agent platform binds this exact DNS name (langgraph-agents/specialists/registry.py), so keep the default unless the consumer is updated too.",
-              "required": [],
+              "description": "Service name. The agent platform binds this exact DNS name\n(langgraph-agents/specialists/registry.py), so keep the default unless the\nconsumer is updated in lockstep.",
               "title": "name",
               "type": "string"
             },

@@ -1,0 +1,366 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+#
+# gateway_dispatch.yaml decides the request the middleware PEP actually sends.
+# The gw_* fixtures come from testdata/ and ARE the contract examples in
+# integration/contracts/mcp_dispatch_request.json. The rest are inline.
+---
+name: MCP gateway dispatch (live middleware request shape)
+principals:
+  staff_acme: {"id": "sam", "roles": ["STAFF"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  ops_acme: {"id": "otto", "roles": ["OPS", "STAFF"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  hr_acme: {"id": "hana", "roles": ["HR", "STAFF"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  warehouse_acme: {"id": "wes", "roles": ["STAFF", "WAREHOUSE"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  admin_acme: {"id": "ada", "roles": ["ADMIN", "STAFF"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  admin_globex: {"id": "bob", "roles": ["ADMIN", "STAFF"], "attr": {"tenants": ["globex"], "tenant_claim_enforce": true}}
+  auditor_acme: {"id": "aud", "roles": ["EXTERNAL_AUDITOR"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  director_acme: {"id": "dee", "roles": ["DIRECTOR", "STAFF"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  support_lead_acme: {"id": "sue", "roles": ["SUPPORT_LEAD"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  staff_no_tenants: {"id": "nat", "roles": ["STAFF"], "attr": {"tenant_claim_enforce": false}}
+  staff_empty_tenants: {"id": "eve", "roles": ["STAFF"], "attr": {"tenants": [], "tenant_claim_enforce": false}}
+  staff_header_tenant: {"id": "hal", "roles": ["STAFF"], "attr": {"tenants": ["globex"], "tenant_claim_enforce": false, "tenant_id": "acme"}}
+  ops_lowercase: {"id": "low", "roles": ["ops", "staff"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  auditor_with_staff: {"id": "aud2", "roles": ["EXTERNAL_AUDITOR", "STAFF"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  auditor_with_admin: {"id": "aud3", "roles": ["ADMIN", "EXTERNAL_AUDITOR", "STAFF"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+resources:
+  read_acme: {"id": "inventory.get_stock", "kind": "mcp_tool", "attr": {"tenant_id": "acme", "module": "inventory", "destructive": false, "approved": false, "approval_ref": ""}}
+  read_globex: {"id": "inventory.get_stock", "kind": "mcp_tool", "attr": {"tenant_id": "globex", "module": "inventory", "destructive": false, "approved": false, "approval_ref": ""}}
+  destructive_approved: {"id": "inventory.decrement_stock", "kind": "mcp_tool", "attr": {"tenant_id": "acme", "module": "inventory", "destructive": true, "approved": true, "approved_by_human": true, "approval_ref": "77"}}
+  destructive_unapproved: {"id": "inventory.decrement_stock", "kind": "mcp_tool", "attr": {"tenant_id": "acme", "module": "inventory", "destructive": true, "approved_by_human": false, "approval_ref": ""}}
+  destructive_bare_flag: {"id": "inventory.decrement_stock", "kind": "mcp_tool", "attr": {"tenant_id": "acme", "module": "inventory", "destructive": true, "approved": true, "approved_by_human": true, "approval_ref": ""}}
+  destructive_approved_globex: {"id": "inventory.decrement_stock", "kind": "mcp_tool", "attr": {"tenant_id": "globex", "module": "inventory", "destructive": true, "approved": true, "approved_by_human": true, "approval_ref": "77"}}
+  audit_read: {"id": "audit_prep.get_entity_audit_history", "kind": "mcp_tool", "attr": {"tenant_id": "acme", "module": "accounting", "destructive": false, "approved": false, "approval_ref": ""}}
+  audit_write: {"id": "audit_prep.draw_sample", "kind": "mcp_tool", "attr": {"tenant_id": "acme", "module": "accounting", "destructive": true, "approved": true, "approved_by_human": true, "approval_ref": "77"}}
+  audit_mislabelled: {"id": "audit_prep.get_audit_package", "kind": "mcp_tool", "attr": {"tenant_id": "acme", "module": "accounting", "destructive": true, "approved": true, "approved_by_human": true, "approval_ref": "77"}}
+  recording_export: {"id": "telephony.request_recording_export", "kind": "mcp_tool", "attr": {"tenant_id": "acme", "module": "telephony", "destructive": true, "approved": true, "approved_by_human": true, "approval_ref": "77"}}
+  call_manifest: {"id": "telephony.get_call_recording_manifest", "kind": "mcp_tool", "attr": {"tenant_id": "acme", "module": "telephony", "destructive": false, "approved": false, "approval_ref": ""}}
+tests:
+  - name: "Contract example gw_ops_release_approved: decided as the fixture says"
+    input:
+      principals: ["gw_ops_release_approved"]
+      resources: ["gw_ops_release_approved"]
+      actions: ["dispatch"]
+    expected:
+      - principal: gw_ops_release_approved
+        resource: gw_ops_release_approved
+        actions: {"dispatch": "EFFECT_ALLOW"}
+  - name: "Contract example gw_ops_release_unapproved: decided as the fixture says"
+    input:
+      principals: ["gw_ops_release_unapproved"]
+      resources: ["gw_ops_release_unapproved"]
+      actions: ["dispatch"]
+    expected:
+      - principal: gw_ops_release_unapproved
+        resource: gw_ops_release_unapproved
+        actions: {"dispatch": "EFFECT_DENY"}
+  - name: "Contract example gw_auditor_package_read: decided as the fixture says"
+    input:
+      principals: ["gw_auditor_package_read"]
+      resources: ["gw_auditor_package_read"]
+      actions: ["dispatch"]
+    expected:
+      - principal: gw_auditor_package_read
+        resource: gw_auditor_package_read
+        actions: {"dispatch": "EFFECT_ALLOW"}
+  - name: "Contract example gw_auditor_shadow_other_tenant: decided as the fixture says"
+    input:
+      principals: ["gw_auditor_shadow_other_tenant"]
+      resources: ["gw_auditor_shadow_other_tenant"]
+      actions: ["dispatch"]
+    expected:
+      - principal: gw_auditor_shadow_other_tenant
+        resource: gw_auditor_shadow_other_tenant
+        actions: {"dispatch": "EFFECT_DENY"}
+  - name: "Contract example gw_auditor_with_staff_staff_tool: decided as the fixture says"
+    input:
+      principals: ["gw_auditor_with_staff_staff_tool"]
+      resources: ["gw_auditor_with_staff_staff_tool"]
+      actions: ["dispatch"]
+    expected:
+      - principal: gw_auditor_with_staff_staff_tool
+        resource: gw_auditor_with_staff_staff_tool
+        actions: {"dispatch": "EFFECT_DENY"}
+  - name: "Staff and gateway roles dispatch a read in their own tenant only"
+    input:
+      principals: ["staff_acme", "ops_acme", "hr_acme", "warehouse_acme", "admin_acme"]
+      resources: ["read_acme", "read_globex"]
+      actions: ["dispatch"]
+    expected:
+      - principal: staff_acme
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: staff_acme
+        resource: read_globex
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: ops_acme
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: ops_acme
+        resource: read_globex
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: hr_acme
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: hr_acme
+        resource: read_globex
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: warehouse_acme
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: warehouse_acme
+        resource: read_globex
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: admin_acme
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: admin_acme
+        resource: read_globex
+        actions: {"dispatch": "EFFECT_DENY"}
+  - name: "A destructive tool needs a named approval in the tenant; a bare flag or none is denied"
+    input:
+      principals: ["staff_acme", "ops_acme", "hr_acme", "warehouse_acme", "admin_acme"]
+      resources: ["destructive_approved", "destructive_unapproved", "destructive_bare_flag", "destructive_approved_globex"]
+      actions: ["dispatch"]
+    expected:
+      - principal: staff_acme
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: staff_acme
+        resource: destructive_unapproved
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: staff_acme
+        resource: destructive_bare_flag
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: staff_acme
+        resource: destructive_approved_globex
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: ops_acme
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: ops_acme
+        resource: destructive_unapproved
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: ops_acme
+        resource: destructive_bare_flag
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: ops_acme
+        resource: destructive_approved_globex
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: hr_acme
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: hr_acme
+        resource: destructive_unapproved
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: hr_acme
+        resource: destructive_bare_flag
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: hr_acme
+        resource: destructive_approved_globex
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: warehouse_acme
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: warehouse_acme
+        resource: destructive_unapproved
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: warehouse_acme
+        resource: destructive_bare_flag
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: warehouse_acme
+        resource: destructive_approved_globex
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: admin_acme
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: admin_acme
+        resource: destructive_unapproved
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: admin_acme
+        resource: destructive_bare_flag
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: admin_acme
+        resource: destructive_approved_globex
+        actions: {"dispatch": "EFFECT_DENY"}
+  - name: "Tenant is membership in the token's tenants, never the request's own tenant or nothing"
+    input:
+      principals: ["staff_no_tenants", "staff_empty_tenants", "staff_header_tenant", "admin_globex"]
+      resources: ["read_acme", "destructive_approved"]
+      actions: ["dispatch"]
+    expected:
+      - principal: staff_no_tenants
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: staff_no_tenants
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: staff_empty_tenants
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: staff_empty_tenants
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: staff_header_tenant
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: staff_header_tenant
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: admin_globex
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: admin_globex
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_DENY"}
+  - name: "Roles are the gateway's upper-case scopes; lowercase role names match nothing"
+    input:
+      principals: ["ops_lowercase"]
+      resources: ["read_acme", "destructive_approved"]
+      actions: ["dispatch", "administer"]
+    expected:
+      - principal: ops_lowercase
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: ops_lowercase
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+  - name: "External auditor reads the allowlisted audit tools in its tenant and nothing else"
+    input:
+      principals: ["auditor_acme"]
+      resources: ["audit_read", "audit_write", "audit_mislabelled", "read_acme", "destructive_approved", "recording_export", "call_manifest"]
+      actions: ["dispatch", "administer"]
+    expected:
+      - principal: auditor_acme
+        resource: audit_read
+        actions: {"dispatch": "EFFECT_ALLOW", "administer": "EFFECT_DENY"}
+      - principal: auditor_acme
+        resource: audit_write
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_acme
+        resource: audit_mislabelled
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_acme
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_acme
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_acme
+        resource: recording_export
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_acme
+        resource: call_manifest
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+  - name: "Holding EXTERNAL_AUDITOR confines a principal to the audit reads, even with STAFF or ADMIN"
+    input:
+      principals: ["auditor_with_staff", "auditor_with_admin"]
+      resources: ["audit_read", "read_acme", "destructive_approved", "audit_write", "audit_mislabelled", "recording_export", "call_manifest"]
+      actions: ["dispatch", "administer"]
+    expected:
+      - principal: auditor_with_staff
+        resource: audit_read
+        actions: {"dispatch": "EFFECT_ALLOW", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: audit_write
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: audit_mislabelled
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: recording_export
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_staff
+        resource: call_manifest
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: audit_read
+        actions: {"dispatch": "EFFECT_ALLOW", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: audit_write
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: audit_mislabelled
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: recording_export
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: auditor_with_admin
+        resource: call_manifest
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+  - name: "Only an ADMIN of the tenant administers the gateway; ops and the other roles cannot"
+    input:
+      principals: ["staff_acme", "ops_acme", "hr_acme", "warehouse_acme", "admin_acme", "admin_globex", "auditor_acme"]
+      resources: ["read_acme"]
+      actions: ["administer"]
+    expected:
+      - principal: staff_acme
+        resource: read_acme
+        actions: {"administer": "EFFECT_DENY"}
+      - principal: ops_acme
+        resource: read_acme
+        actions: {"administer": "EFFECT_DENY"}
+      - principal: hr_acme
+        resource: read_acme
+        actions: {"administer": "EFFECT_DENY"}
+      - principal: warehouse_acme
+        resource: read_acme
+        actions: {"administer": "EFFECT_DENY"}
+      - principal: admin_acme
+        resource: read_acme
+        actions: {"administer": "EFFECT_ALLOW"}
+      - principal: admin_globex
+        resource: read_acme
+        actions: {"administer": "EFFECT_DENY"}
+      - principal: auditor_acme
+        resource: read_acme
+        actions: {"administer": "EFFECT_DENY"}
+  - name: "Recording export needs DIRECTOR or ADMIN even with an approval"
+    input:
+      principals: ["staff_acme", "ops_acme", "director_acme", "admin_acme", "support_lead_acme"]
+      resources: ["recording_export"]
+      actions: ["dispatch"]
+    expected:
+      - principal: staff_acme
+        resource: recording_export
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: ops_acme
+        resource: recording_export
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: director_acme
+        resource: recording_export
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: admin_acme
+        resource: recording_export
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: support_lead_acme
+        resource: recording_export
+        actions: {"dispatch": "EFFECT_DENY"}
+  - name: "Support leads read call metadata in their tenant; the auditor does not"
+    input:
+      principals: ["support_lead_acme", "auditor_acme"]
+      resources: ["call_manifest", "read_acme"]
+      actions: ["dispatch"]
+    expected:
+      - principal: support_lead_acme
+        resource: call_manifest
+        actions: {"dispatch": "EFFECT_ALLOW"}
+      - principal: support_lead_acme
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: auditor_acme
+        resource: call_manifest
+        actions: {"dispatch": "EFFECT_DENY"}
+      - principal: auditor_acme
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY"}

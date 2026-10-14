@@ -15,7 +15,11 @@
       <legend class="oh-label">{% trans "Baseline" %}</legend>
       {% for r in baseline_roles %}
         <label class="d-block">
+          {% if r.assignable is False %}
+          <input type="checkbox" disabled>
+          {% else %}
           <input type="checkbox" name="roles" value="{{ r.key }}" {% if r.key in selected %}checked{% endif %}>
+          {% endif %}
           <strong>{{ r.label }}</strong> — <small class="text-muted">{{ r.description }}</small>
         </label>
       {% endfor %}
@@ -24,10 +28,12 @@
     {% for m in modules %}
     <fieldset class="oh-card p-3 mb-3">
       <legend class="oh-label">{{ m.label }}</legend>
+      {% if m.description %}<p class="text-muted"><small>{{ m.description }}</small></p>{% endif %}
       {% for r in m.roles %}
         <label class="d-block">
           <input type="checkbox" name="roles" value="{{ r.key }}" {% if r.key in selected %}checked{% endif %}>
           <strong>{{ r.label }}</strong> — <small class="text-muted">{{ r.description }}</small>
+          {% if r.keycloak_realm_role %}<small class="text-muted">({% trans "also granted in the sign-in token on save" %})</small>{% endif %}
         </label>
       {% endfor %}
     </fieldset>

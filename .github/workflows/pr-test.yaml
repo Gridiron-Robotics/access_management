@@ -126,7 +126,11 @@ jobs:
         with:
           tools: just
 
+      # Timings only balance the split. A fork has no earlier run to download
+      # them from, and testsplit falls back to an even split when the file is
+      # missing, so a missing artifact must not fail the job before any test runs.
       - name: Download previous test times
+        continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: previous-test-times
@@ -286,24 +290,16 @@ jobs:
           format: true
           lint: true
 
-      - name: Find latest release
-        id: latest-release
-        run: gh release view --json tagName --jq '"tag=\(.tagName)"' >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Set latest release commit ID
-        id: latest_release_commit_id
-        run: |
-          echo "LATEST_RELEASE_COMMIT_ID=$(git rev-list -n 1 "tags/${STEPS_LATEST_RELEASE_OUTPUTS_TAG}")" >> "$GITHUB_OUTPUT"
-        env:
-          STEPS_LATEST_RELEASE_OUTPUTS_TAG: ${{ steps.latest-release.outputs.tag }}
-
+      # The compatibility baseline is this PR's own base commit: "does this change
+      # break the API we already ship?". This fork was cut from upstream between
+      # releases (its protos match no upstream tag) and has no releases or tags of
+      # its own, so neither upstream's latest release nor a local tag is a valid
+      # baseline. Upstream's API changes arrive through deliberate merges.
       - name: Check backwards compatibility
         uses: cerbos/buf-breaking-action@b637955df51832cca5dd244fb3ac9ab35781cdb5 # since
         with:
-          against: https://github.com/cerbos/cerbos.git#ref=${{ steps.latest_release_commit_id.outputs.LATEST_RELEASE_COMMIT_ID }}
-          since: https://github.com/cerbos/cerbos.git#ref=main
+          against: ${{ github.server_url }}/${{ github.repository }}.git#ref=${{ github.event.pull_request.base.sha }}
+          since: ${{ github.server_url }}/${{ github.repository }}.git#ref=${{ github.event.pull_request.base.sha }}
 
   test-helm:
     needs: changes
@@ -352,6 +348,23 @@ jobs:
           tools: |-
             goreleaser
             syft
+
+      # A snapshot is versioned "<latest tag, minor+1>-prerelease", and the npm
+      # hook refuses a binary whose version differs from npm/packages/*. This
+      # fork has no tags, so goreleaser would fall back to 0.1.0-prerelease.
+      # Only when there is no tag, derive the tag the packages imply
+      # (0.54.0-prerelease -> v0.53.0) so both come from one source.
+      - name: Derive snapshot base tag when the clone has none
+        run: |-
+          if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            exit 0
+          fi
+          version="$(jq --raw-output .version npm/packages/cerbos/package.json)"
+          if [[ ! "${version}" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+-prerelease$ ]] || [[ "${BASH_REMATCH[2]}" -eq 0 ]]; then
+            echo "::error::cannot derive a base tag from npm package version ${version}"
+            exit 1
+          fi
+          echo "GORELEASER_CURRENT_TAG=v${BASH_REMATCH[1]}.$((BASH_REMATCH[2] - 1)).0" >> "${GITHUB_ENV}"
 
       - name: Build binaries
         run: goreleaser build --config=.goreleaser.yml --clean --snapshot
