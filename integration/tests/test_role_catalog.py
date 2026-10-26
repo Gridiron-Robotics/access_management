@@ -73,6 +73,19 @@ def test_each_gateway_role_is_a_token_role_in_its_module():
         assert where[key][1]["keycloak_realm_role"] is True
 
 
+def test_the_model_change_approvers_are_token_roles_with_a_policy():
+    """ITGC-M: the middleware's model_promotion chains name these four, so each
+    must be assignable here, reach the token, and be decided by model_change."""
+    module = next(m for m in catalog.MODULES if m["key"] == "model_governance")
+    keys = {r["key"]: r for r in module["roles"]}
+    assert set(keys) == {"ml_lead", "controller", "cfo_designate", "oncall_lead"}
+    assert all(r["keycloak_realm_role"] is True for r in keys.values())
+    assert not any(r.get("external") for r in keys.values())
+    doc = yaml.safe_load((ROOT / "policies" / "governance" / "model_change.yaml").read_text())
+    named = {role for rule in doc["resourcePolicy"]["rules"] for role in rule.get("roles", [])}
+    assert set(keys) <= named
+
+
 def test_external_auditor_cannot_be_mistaken_for_staff_access():
     module = next(m for m in catalog.MODULES if m["key"] == "external")
     role = module["roles"][0]

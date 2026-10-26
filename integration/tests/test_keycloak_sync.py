@@ -119,8 +119,14 @@ def _reconcile(fake, records, **kw):
 
 # -- the catalog marks exactly the roles the sync may manage ----------------
 
-def test_the_four_gateway_roles_are_the_token_roles():
-    assert catalog.token_realm_roles() == {"ops", "external_auditor", "hr", "warehouse"}
+def test_the_gateway_roles_are_the_token_roles():
+    # The four gateway roles, plus the four model-change approvers (ITGC-M):
+    # the middleware's model_promotion chains name ML_LEAD / CONTROLLER /
+    # CFO_DESIGNATE / ONCALL_LEAD, so assigning one must put it in the token.
+    assert catalog.token_realm_roles() == {
+        "ops", "external_auditor", "hr", "warehouse",
+        "ml_lead", "controller", "cfo_designate", "oncall_lead",
+    }
 
 
 def test_external_auditor_is_the_only_external_role():

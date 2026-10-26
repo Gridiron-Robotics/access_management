@@ -293,6 +293,59 @@ MODULES = [
         ],
     },
     {
+        "key": "model_governance",
+        "label": "AI Model Change Control (ITGC)",
+        "description": (
+            "Who may approve a change to the AI model that serves an agent. Assign "
+            "each role to NAMED people: the ERP middleware routes every model "
+            "change to these roles and refuses the requester and any administrator "
+            "as an approver, so a chain whose role nobody holds stays unapproved. "
+            "Hold them apart — one person holding two of them still cannot sign two"
+            " steps of one change."
+        ),
+        "roles": [
+            {
+                "key": "ml_lead",
+                "label": "ML Lead",
+                "description": (
+                    "First approver of every model change (tenant adapter alone; domain and"
+                    " material changes with the roles below). May file changes and "
+                    "emergency rollbacks; never approves a change they filed."
+                ),
+                "keycloak_realm_role": True,
+            },
+            {
+                "key": "controller",
+                "label": "Controller",
+                "description": (
+                    "Second approver of a domain-wide or material model change; confirms "
+                    "which agents the organisation treats as SOX-significant. Also the "
+                    "CONTROLLER step of large revenue contracts in the ERP."
+                ),
+                "keycloak_realm_role": True,
+            },
+            {
+                "key": "cfo_designate",
+                "label": "CFO Designate",
+                "description": (
+                    "Third approver of a material model change — a base-model swap, a "
+                    "global change, or a change to a SOX-significant agent; may confirm the"
+                    " SOX-significant list."
+                ),
+                "keycloak_realm_role": True,
+            },
+            {
+                "key": "oncall_lead",
+                "label": "On-call Lead",
+                "description": (
+                    "Approves an emergency model rollback (one-hour SLA) and may file one. "
+                    "A rollback still needs this approval; it is never automatic."
+                ),
+                "keycloak_realm_role": True,
+            },
+        ],
+    },
+    {
         "key": "external",
         "label": "External parties — NOT staff",
         "description": (

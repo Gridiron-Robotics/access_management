@@ -74,6 +74,10 @@ the derived roles below build on it.
 | `hr` (token) | hr | view/edit employee records (not terminate); MCP dispatch as `ops` |
 | `warehouse` (token) | inventory | view stock, adjust **in own location**; view tenant orders/shipments; MCP dispatch as `ops`; **no finance** |
 | `external_auditor` (token) | external | **read-only, NOT staff**: dispatch of the five `audit_prep` read tools in its own tenant; nothing else, no write of any kind — even combined with any other role |
+| `ml_lead` (token) | model_governance | first approver of every AI model change; files changes and emergency rollbacks; never approves their own |
+| `controller` (token) | model_governance | second approver of domain-wide / material model changes; confirms the SOX-significant agent list |
+| `cfo_designate` (token) | model_governance | third approver of material model changes (base model, global, SOX-significant agent) |
+| `oncall_lead` (token) | model_governance | approves an emergency model rollback (1h SLA); a rollback is never automatic |
 
 (token) = **token role** (`keycloak_realm_role: true` in the catalog): also a realm
 role of the same name in Keycloak realm `erp`, which the ERP middleware reads

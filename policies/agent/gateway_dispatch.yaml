@@ -56,10 +56,14 @@ resourcePolicy:
         && has(request.resource.attr.approval_ref)
         && size(request.resource.attr.approval_ref) > 0
   rules:
-    # Non-destructive dispatch: staff and the gateway roles, own tenant.
+    # Non-destructive dispatch: staff and the gateway roles, own tenant. The
+    # model-governance roles (ML_LEAD, CONTROLLER, CFO_DESIGNATE, ONCALL_LEAD)
+    # are named so their holders reach the governance.* tools by role class
+    # rather than only through the STAFF default; the middleware's per-tool
+    # scopes still decide which governance tool each may call.
     - actions: ["dispatch"]
       effect: EFFECT_ALLOW
-      roles: ["ADMIN", "STAFF", "OPS", "HR", "WAREHOUSE"]
+      roles: ["ADMIN", "STAFF", "OPS", "HR", "WAREHOUSE", "ML_LEAD", "CONTROLLER", "CFO_DESIGNATE", "ONCALL_LEAD"]
       condition:
         match:
           all:
@@ -71,7 +75,7 @@ resourcePolicy:
     # approval (a non-empty approval_ref naming the DispatchApproval row).
     - actions: ["dispatch"]
       effect: EFFECT_ALLOW
-      roles: ["ADMIN", "STAFF", "OPS", "HR", "WAREHOUSE"]
+      roles: ["ADMIN", "STAFF", "OPS", "HR", "WAREHOUSE", "ML_LEAD", "CONTROLLER", "CFO_DESIGNATE", "ONCALL_LEAD"]
       condition:
         match:
           all:

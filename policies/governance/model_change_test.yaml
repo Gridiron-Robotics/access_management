@@ -1,0 +1,152 @@
+# yaml-language-server: $schema=../../schema/jsonschema/cerbos/policy/v1/TestSuite.schema.json
+#
+# ITGC-M model change control. The DENY cases are the control: the requester
+# never approves, admin is not an approver, an agent never approves, each role
+# signs only its own step, and nothing is applied before it is approved.
+---
+name: Model change control policy tests
+principals:
+  ml_mia:
+    id: mia
+    roles: ["ml_lead", "employee"]
+    attr: { tenant_id: tenant-a }
+  ctrl_cal:
+    id: cal
+    roles: ["controller", "employee"]
+    attr: { tenant_id: tenant-a }
+  cfo_cora:
+    id: cora
+    roles: ["cfo_designate", "employee"]
+    attr: { tenant_id: tenant-a }
+  oncall_oz:
+    id: oz
+    roles: ["oncall_lead", "employee"]
+    attr: { tenant_id: tenant-a }
+  admin_ada:
+    id: ada
+    roles: ["admin", "employee"]
+    attr: { tenant_id: tenant-a }
+  bot_bea:
+    id: bea
+    roles: ["agent_operator", "employee"]
+    attr: { tenant_id: tenant-a }
+  bot_ml_bo:                 # an agent account mis-assigned ml_lead
+    id: bo
+    roles: ["agent_operator", "ml_lead", "employee"]
+    attr: { tenant_id: tenant-a }
+  ml_other:                  # ML lead of a different tenant
+    id: max
+    roles: ["ml_lead", "employee"]
+    attr: { tenant_id: tenant-b }
+  auditor_aud:
+    id: aud
+    roles: ["external_auditor"]
+    attr: { tenant_id: tenant-a }
+
+resources:
+  step_ml:       { id: c1, kind: "model_change", attr: { tenant_id: tenant-a, state: requested, step_role: ML_LEAD,       materiality: "2", requested_by: svc-training, requester_identities: [svc-training, trainer-bot] } }
+  step_ctrl:     { id: c2, kind: "model_change", attr: { tenant_id: tenant-a, state: requested, step_role: CONTROLLER,    materiality: "3", requested_by: svc-training, requester_identities: [svc-training] } }
+  step_cfo:      { id: c3, kind: "model_change", attr: { tenant_id: tenant-a, state: requested, step_role: CFO_DESIGNATE, materiality: "3", requested_by: svc-training, requester_identities: [svc-training] } }
+  rb_pending:    { id: c4, kind: "model_change", attr: { tenant_id: tenant-a, state: requested, step_role: ONCALL_LEAD,   materiality: "E", requested_by: mia, requester_identities: [mia] } }
+  rb_by_oz:      { id: c5, kind: "model_change", attr: { tenant_id: tenant-a, state: requested, step_role: ONCALL_LEAD,   materiality: "E", requested_by: oz, requester_identities: [oz] } }
+  mine_ml:       { id: c6, kind: "model_change", attr: { tenant_id: tenant-a, state: requested, step_role: ML_LEAD,       materiality: "1", requested_by: mia, requester_identities: [mia] } }
+  named_mia:     { id: c7, kind: "model_change", attr: { tenant_id: tenant-a, state: requested, step_role: ML_LEAD,       materiality: "1", requested_by: svc-training, requester_identities: [svc-training, mia] } }
+  decided_ml:    { id: c8, kind: "model_change", attr: { tenant_id: tenant-a, state: approved,  step_role: ML_LEAD,       materiality: "1", requested_by: svc-training, requester_identities: [svc-training] } }
+  rb_approved:   { id: c9, kind: "model_change", attr: { tenant_id: tenant-a, state: approved,  step_role: ONCALL_LEAD,   materiality: "E", requested_by: oz, requester_identities: [oz] } }
+  rb_requested:  { id: c10, kind: "model_change", attr: { tenant_id: tenant-a, state: requested, step_role: ONCALL_LEAD,  materiality: "E", requested_by: oz, requester_identities: [oz] } }
+  rejected:      { id: c11, kind: "model_change", attr: { tenant_id: tenant-a, state: rejected,  step_role: ML_LEAD,       materiality: "1", requested_by: oz, requester_identities: [oz] } }
+
+tests:
+  - name: Each approver signs only the step that names it
+    input:
+      principals: [ml_mia, ctrl_cal, cfo_cora, oncall_oz]
+      resources: [step_ml, step_ctrl, step_cfo, rb_pending]
+      actions: [approve]
+    expected:
+      - { principal: ml_mia,    resource: step_ml,    actions: { approve: EFFECT_ALLOW } }
+      - { principal: ml_mia,    resource: step_ctrl,  actions: { approve: EFFECT_DENY } }
+      - { principal: ml_mia,    resource: step_cfo,   actions: { approve: EFFECT_DENY } }
+      - { principal: ml_mia,    resource: rb_pending, actions: { approve: EFFECT_DENY } }
+      - { principal: ctrl_cal,  resource: step_ml,    actions: { approve: EFFECT_DENY } }
+      - { principal: ctrl_cal,  resource: step_ctrl,  actions: { approve: EFFECT_ALLOW } }
+      - { principal: ctrl_cal,  resource: step_cfo,   actions: { approve: EFFECT_DENY } }
+      - { principal: ctrl_cal,  resource: rb_pending, actions: { approve: EFFECT_DENY } }
+      - { principal: cfo_cora,  resource: step_ml,    actions: { approve: EFFECT_DENY } }
+      - { principal: cfo_cora,  resource: step_ctrl,  actions: { approve: EFFECT_DENY } }
+      - { principal: cfo_cora,  resource: step_cfo,   actions: { approve: EFFECT_ALLOW } }
+      - { principal: cfo_cora,  resource: rb_pending, actions: { approve: EFFECT_DENY } }
+      - { principal: oncall_oz, resource: step_ml,    actions: { approve: EFFECT_DENY } }
+      - { principal: oncall_oz, resource: step_ctrl,  actions: { approve: EFFECT_DENY } }
+      - { principal: oncall_oz, resource: step_cfo,   actions: { approve: EFFECT_DENY } }
+      - { principal: oncall_oz, resource: rb_pending, actions: { approve: EFFECT_ALLOW } }
+
+  - name: The requester never approves their own change, however they are named
+    input:
+      principals: [ml_mia, oncall_oz]
+      resources: [mine_ml, named_mia, rb_by_oz]
+      actions: [approve, reject]
+    expected:
+      - { principal: ml_mia,    resource: mine_ml,   actions: { approve: EFFECT_DENY, reject: EFFECT_DENY } }
+      - { principal: ml_mia,    resource: named_mia, actions: { approve: EFFECT_DENY, reject: EFFECT_DENY } }
+      - { principal: ml_mia,    resource: rb_by_oz,  actions: { approve: EFFECT_DENY, reject: EFFECT_DENY } }
+      - { principal: oncall_oz, resource: mine_ml,   actions: { approve: EFFECT_DENY, reject: EFFECT_DENY } }
+      - { principal: oncall_oz, resource: named_mia, actions: { approve: EFFECT_DENY, reject: EFFECT_DENY } }
+      - { principal: oncall_oz, resource: rb_by_oz,  actions: { approve: EFFECT_DENY, reject: EFFECT_DENY } }
+
+  - name: Admin is not an approver of a model change, and an agent never is
+    input:
+      principals: [admin_ada, bot_bea, bot_ml_bo]
+      resources: [step_ml, step_ctrl, step_cfo, rb_pending]
+      actions: [approve]
+    expected:
+      - { principal: admin_ada, resource: step_ml,    actions: { approve: EFFECT_DENY } }
+      - { principal: admin_ada, resource: step_ctrl,  actions: { approve: EFFECT_DENY } }
+      - { principal: admin_ada, resource: step_cfo,   actions: { approve: EFFECT_DENY } }
+      - { principal: admin_ada, resource: rb_pending, actions: { approve: EFFECT_DENY } }
+      - { principal: bot_bea,   resource: step_ml,    actions: { approve: EFFECT_DENY } }
+      - { principal: bot_bea,   resource: step_ctrl,  actions: { approve: EFFECT_DENY } }
+      - { principal: bot_bea,   resource: step_cfo,   actions: { approve: EFFECT_DENY } }
+      - { principal: bot_bea,   resource: rb_pending, actions: { approve: EFFECT_DENY } }
+      - { principal: bot_ml_bo, resource: step_ml,    actions: { approve: EFFECT_DENY } }
+      - { principal: bot_ml_bo, resource: step_ctrl,  actions: { approve: EFFECT_DENY } }
+      - { principal: bot_ml_bo, resource: step_cfo,   actions: { approve: EFFECT_DENY } }
+      - { principal: bot_ml_bo, resource: rb_pending, actions: { approve: EFFECT_DENY } }
+
+  - name: Another tenant's ML lead cannot approve, and a decided step cannot be signed again
+    input:
+      principals: [ml_other, ml_mia]
+      resources: [step_ml, decided_ml]
+      actions: [approve, view]
+    expected:
+      - { principal: ml_other, resource: step_ml,    actions: { approve: EFFECT_DENY,  view: EFFECT_DENY } }
+      - { principal: ml_other, resource: decided_ml, actions: { approve: EFFECT_DENY,  view: EFFECT_DENY } }
+      - { principal: ml_mia,   resource: step_ml,    actions: { approve: EFFECT_ALLOW, view: EFFECT_ALLOW } }
+      - { principal: ml_mia,   resource: decided_ml, actions: { approve: EFFECT_DENY,  view: EFFECT_ALLOW } }
+
+  - name: Nothing is applied before it is approved, a rollback included
+    input:
+      principals: [bot_bea, admin_ada, ml_mia]
+      resources: [rb_approved, rb_requested, rejected]
+      actions: [apply]
+    expected:
+      - { principal: bot_bea,   resource: rb_approved,  actions: { apply: EFFECT_ALLOW } }
+      - { principal: bot_bea,   resource: rb_requested, actions: { apply: EFFECT_DENY } }
+      - { principal: bot_bea,   resource: rejected,     actions: { apply: EFFECT_DENY } }
+      - { principal: admin_ada, resource: rb_approved,  actions: { apply: EFFECT_ALLOW } }
+      - { principal: admin_ada, resource: rb_requested, actions: { apply: EFFECT_DENY } }
+      - { principal: admin_ada, resource: rejected,     actions: { apply: EFFECT_DENY } }
+      - { principal: ml_mia,    resource: rb_approved,  actions: { apply: EFFECT_DENY } }
+      - { principal: ml_mia,    resource: rb_requested, actions: { apply: EFFECT_DENY } }
+      - { principal: ml_mia,    resource: rejected,     actions: { apply: EFFECT_DENY } }
+
+  - name: Who may file a change, file a rollback, read, or set the SOX scope
+    input:
+      principals: [ml_mia, oncall_oz, ctrl_cal, auditor_aud, admin_ada]
+      resources: [step_ml]
+      actions: [request, request_rollback, view, set_sox_scope]
+    expected:
+      - { principal: ml_mia,      resource: step_ml, actions: { request: EFFECT_ALLOW, request_rollback: EFFECT_ALLOW, view: EFFECT_ALLOW, set_sox_scope: EFFECT_DENY } }
+      - { principal: oncall_oz,   resource: step_ml, actions: { request: EFFECT_DENY,  request_rollback: EFFECT_ALLOW, view: EFFECT_ALLOW, set_sox_scope: EFFECT_DENY } }
+      - { principal: ctrl_cal,    resource: step_ml, actions: { request: EFFECT_DENY,  request_rollback: EFFECT_DENY,  view: EFFECT_ALLOW, set_sox_scope: EFFECT_ALLOW } }
+      - { principal: auditor_aud, resource: step_ml, actions: { request: EFFECT_DENY,  request_rollback: EFFECT_DENY,  view: EFFECT_ALLOW, set_sox_scope: EFFECT_DENY } }
+      - { principal: admin_ada,   resource: step_ml, actions: { request: EFFECT_ALLOW, request_rollback: EFFECT_ALLOW, view: EFFECT_ALLOW, set_sox_scope: EFFECT_DENY } }

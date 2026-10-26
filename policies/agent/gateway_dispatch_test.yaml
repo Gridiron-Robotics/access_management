@@ -20,6 +20,8 @@ principals:
   staff_header_tenant: {"id": "hal", "roles": ["STAFF"], "attr": {"tenants": ["globex"], "tenant_claim_enforce": false, "tenant_id": "acme"}}
   ops_lowercase: {"id": "low", "roles": ["ops", "staff"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
   auditor_with_staff: {"id": "aud2", "roles": ["EXTERNAL_AUDITOR", "STAFF"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  ml_lead_acme: {"id": "mia", "roles": ["ML_LEAD"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
+  oncall_lead_globex: {"id": "oz", "roles": ["ONCALL_LEAD"], "attr": {"tenants": ["globex"], "tenant_claim_enforce": true}}
   auditor_with_admin: {"id": "aud3", "roles": ["ADMIN", "EXTERNAL_AUDITOR", "STAFF"], "attr": {"tenants": ["acme"], "tenant_claim_enforce": true}}
 resources:
   read_acme: {"id": "inventory.get_stock", "kind": "mcp_tool", "attr": {"tenant_id": "acme", "module": "inventory", "destructive": false, "approved": false, "approval_ref": ""}}
@@ -211,6 +213,30 @@ tests:
       - principal: admin_globex
         resource: destructive_approved
         actions: {"dispatch": "EFFECT_DENY"}
+  - name: "Model-governance roles dispatch in their own tenant, destructive only with an approval"
+    input:
+      principals: ["ml_lead_acme", "oncall_lead_globex"]
+      resources: ["read_acme", "destructive_approved", "destructive_unapproved"]
+      actions: ["dispatch", "administer"]
+    expected:
+      - principal: ml_lead_acme
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_ALLOW", "administer": "EFFECT_DENY"}
+      - principal: ml_lead_acme
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_ALLOW", "administer": "EFFECT_DENY"}
+      - principal: ml_lead_acme
+        resource: destructive_unapproved
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: oncall_lead_globex
+        resource: read_acme
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: oncall_lead_globex
+        resource: destructive_approved
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
+      - principal: oncall_lead_globex
+        resource: destructive_unapproved
+        actions: {"dispatch": "EFFECT_DENY", "administer": "EFFECT_DENY"}
   - name: "Roles are the gateway's upper-case scopes; lowercase role names match nothing"
     input:
       principals: ["ops_lowercase"]
