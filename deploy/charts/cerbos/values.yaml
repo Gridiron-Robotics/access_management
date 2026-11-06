@@ -372,6 +372,7 @@ cerbos:
   config: {}
 
 # @schema
+# type: object
 # required: false
 # @schema
 # Contract-A MCP sidecar (integration/mcp/server.py) — the agent-plane surface
@@ -383,6 +384,7 @@ cerbos:
 # upstream. See deploy/charts/cerbos/values-mcp.yaml for an enabled example.
 mcp:
   # @schema
+  # type: boolean
   # default: false
   # @schema
   # Render the MCP sidecar Deployment + Service. Off by default.
@@ -432,6 +434,7 @@ mcp:
   # Service settings for the sidecar.
   service:
     # @schema
+    # type: string
     # default: access-management-mcp
     # @schema
     # Service name. The agent platform binds this exact DNS name

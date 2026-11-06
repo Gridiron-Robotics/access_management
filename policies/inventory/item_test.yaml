@@ -13,6 +13,26 @@ principals:
     attr:
       location: NYC
 
+  warehouse_wes:   # ERP-gateway WAREHOUSE role
+    id: wes
+    roles: ["warehouse", "employee"]
+    attr:
+      location: NYC
+  ops_otto:        # ERP-gateway OPS role
+    id: otto
+    roles: ["ops", "employee"]
+    attr:
+      location: NYC
+  hr_hal:          # ERP-gateway HR role
+    id: hal
+    roles: ["hr", "employee"]
+    attr:
+      location: NYC
+  auditor_aud:     # external auditor — NOT staff
+    id: aud
+    roles: ["external_auditor"]
+    attr:
+      location: NYC
 resources:
   item_nyc:
     id: itm-nyc
@@ -63,3 +83,59 @@ tests:
         actions:
           transfer: EFFECT_ALLOW
           delete: EFFECT_ALLOW
+
+  - name: Warehouse role views and adjusts stock in its own location, nothing more
+    input:
+      principals: [warehouse_wes]
+      resources: [item_nyc]
+      actions: [view, create, adjust, transfer, delete]
+    expected:
+      - principal: warehouse_wes
+        resource: item_nyc
+        actions: { view: EFFECT_ALLOW, create: EFFECT_DENY, adjust: EFFECT_ALLOW, transfer: EFFECT_DENY, delete: EFFECT_DENY }
+
+  - name: Warehouse role cannot adjust stock in another location
+    input:
+      principals: [warehouse_wes]
+      resources: [item_la]
+      actions: [view, create, adjust, transfer, delete]
+    expected:
+      - principal: warehouse_wes
+        resource: item_la
+        actions: { view: EFFECT_ALLOW, create: EFFECT_DENY, adjust: EFFECT_DENY, transfer: EFFECT_DENY, delete: EFFECT_DENY }
+
+  - name: Ops role views stock but cannot change it
+    input:
+      principals: [ops_otto]
+      resources: [item_nyc]
+      actions: [view, create, adjust, transfer, delete]
+    expected:
+      - principal: ops_otto
+        resource: item_nyc
+        actions: { view: EFFECT_ALLOW, create: EFFECT_DENY, adjust: EFFECT_DENY, transfer: EFFECT_DENY, delete: EFFECT_DENY }
+
+  - name: HR role is denied inventory, reads and writes
+    input:
+      principals: [hr_hal]
+      resources: [item_nyc, item_la]
+      actions: [view, create, adjust, transfer, delete]
+    expected:
+      - principal: hr_hal
+        resource: item_nyc
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, adjust: EFFECT_DENY, transfer: EFFECT_DENY, delete: EFFECT_DENY }
+      - principal: hr_hal
+        resource: item_la
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, adjust: EFFECT_DENY, transfer: EFFECT_DENY, delete: EFFECT_DENY }
+
+  - name: External auditor is denied every inventory action
+    input:
+      principals: [auditor_aud]
+      resources: [item_nyc, item_la]
+      actions: [view, create, adjust, transfer, delete]
+    expected:
+      - principal: auditor_aud
+        resource: item_nyc
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, adjust: EFFECT_DENY, transfer: EFFECT_DENY, delete: EFFECT_DENY }
+      - principal: auditor_aud
+        resource: item_la
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, adjust: EFFECT_DENY, transfer: EFFECT_DENY, delete: EFFECT_DENY }

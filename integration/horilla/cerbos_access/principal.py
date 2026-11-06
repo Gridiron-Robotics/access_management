@@ -2,7 +2,13 @@
 
 Roles come from the EmployeeAccess assignment; attributes come from the
 employee's work information (department, job position, etc.).
+
+The `employee` baseline is added automatically for an active employee, EXCEPT
+when every role assigned is an external one (e.g. `external_auditor`): an
+outside party is not staff and must not pick up staff ownership rights.
 """
+
+from .catalog import external_role_keys
 
 
 def _safe(obj, method_name):
@@ -21,7 +27,9 @@ def build_principal(employee):
     access = getattr(employee, "cerbos_access", None)
     if access and access.roles:
         roles = list(access.roles)
-    if getattr(employee, "is_active", True) and "employee" not in roles:
+    external = external_role_keys()
+    only_external = bool(roles) and all(r in external for r in roles)
+    if getattr(employee, "is_active", True) and "employee" not in roles and not only_external:
         roles.append("employee")
 
     attr = {}

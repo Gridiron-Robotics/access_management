@@ -1,0 +1,169 @@
+# Governance -> Model change control (ITGC-M).
+#
+# A change to the model behind an agent alters every judgement it makes, and
+# some of those agents post to the general ledger. This policy is the PDP half
+# of the change control the ERP middleware runs (erp_django_middleware
+# django_middleware/ai/model_change.py, approvals/rules.py bands
+# `model.change.*`): who may FILE a change, who may APPROVE a step of it, and
+# who may RECORD it as applied.
+#
+# THE ROLES. Four token roles from integration/role-catalog.yaml, module
+# `model_governance` (Keycloak realm `erp`; the gateway sees them upper-cased):
+#   ml_lead        first step of every forward change
+#   controller     second step of a domain / material change
+#   cfo_designate  third step of a material change (base LLM, global, or a
+#                  target the customer confirmed SOX-significant)
+#   oncall_lead    the single step of an emergency rollback
+#
+# Resource attributes, all from the middleware's ModelChangeRequest / its
+# ApprovalRequest at request time:
+#   tenant_id              the change's tenant
+#   requested_by           the authenticated requester of record
+#   requester_identities   everyone who can be said to have asked (the service
+#                          account AND the person it named)
+#   state                  requested | approved | applied | rejected |
+#                          rolled_back | superseded
+#   step_role              the role the CURRENT approval step requires
+#                          (ML_LEAD | CONTROLLER | CFO_DESIGNATE | ONCALL_LEAD)
+#   materiality            "1" | "2" | "3" | "E"
+#
+# THE TWO-PERSON RULE, here as well as in code. Nobody approves a change they
+# requested (explicit DENY, whatever roles they hold). `admin` is NOT an
+# approver of a model change: ordinary approval chains let an administrator act
+# on any step, and an ITGC is precisely the control an administrator must not
+# be able to satisfy alone. No rule grants it; the tests prove it is denied.
+# An autonomous agent can never approve, even if it also holds an approver
+# role (explicit DENY keyed on the principal's roles).
+#
+# ROLLBACK cannot skip approval: `apply` is allowed only when the change is
+# `approved`, for a rollback exactly as for a promotion.
+---
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  resource: "model_change"
+  version: "default"
+  variables:
+    local:
+      same_tenant: request.resource.attr.tenant_id == request.principal.attr.tenant_id
+      is_requester: >-
+        request.principal.id == request.resource.attr.requested_by
+        || (has(request.resource.attr.requester_identities)
+            && request.principal.id in request.resource.attr.requester_identities)
+      pending: request.resource.attr.state == "requested"
+  rules:
+    # Reading the change record and the serving state.
+    - actions: ["view", "list"]
+      effect: EFFECT_ALLOW
+      roles: ["ml_lead", "controller", "cfo_designate", "oncall_lead", "ops", "admin", "external_auditor"]
+      condition:
+        match:
+          expr: V.same_tenant
+
+    # Filing a forward change. Filing is not approving.
+    - actions: ["request"]
+      effect: EFFECT_ALLOW
+      roles: ["ml_lead", "ops", "admin"]
+      condition:
+        match:
+          expr: V.same_tenant
+
+    # Filing an emergency rollback (it still needs an ONCALL_LEAD approval).
+    - actions: ["request_rollback"]
+      effect: EFFECT_ALLOW
+      roles: ["ml_lead", "oncall_lead", "ops", "admin"]
+      condition:
+        match:
+          expr: V.same_tenant
+
+    # Approving: each role signs only the step that names it, only while the
+    # change is pending, only in its own tenant, and never its own request.
+    - actions: ["approve", "reject"]
+      effect: EFFECT_ALLOW
+      roles: ["ml_lead"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: V.same_tenant
+              - expr: V.pending
+              - expr: request.resource.attr.step_role == "ML_LEAD"
+              - expr: "!V.is_requester"
+    - actions: ["approve", "reject"]
+      effect: EFFECT_ALLOW
+      roles: ["controller"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: V.same_tenant
+              - expr: V.pending
+              - expr: request.resource.attr.step_role == "CONTROLLER"
+              - expr: "!V.is_requester"
+    - actions: ["approve", "reject"]
+      effect: EFFECT_ALLOW
+      roles: ["cfo_designate"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: V.same_tenant
+              - expr: V.pending
+              - expr: request.resource.attr.step_role == "CFO_DESIGNATE"
+              - expr: "!V.is_requester"
+    - actions: ["approve", "reject"]
+      effect: EFFECT_ALLOW
+      roles: ["oncall_lead"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: V.same_tenant
+              - expr: V.pending
+              - expr: request.resource.attr.step_role == "ONCALL_LEAD"
+              - expr: "!V.is_requester"
+
+    # Requester-cannot-approve, whoever asks and whatever else they hold.
+    - actions: ["approve", "reject"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: V.is_requester
+
+    # An autonomous agent never approves a model change, whatever else it
+    # holds. Written on roles ["*"] with a condition on the principal's roles:
+    # this engine decides per role, so a DENY scoped to the agent roles would
+    # not stop an agent account that was also (wrongly) assigned ml_lead.
+    - actions: ["approve", "reject"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: >-
+            "agent_operator" in request.principal.roles
+            || "agent_supervisor" in request.principal.roles
+
+    # Recording a change as applied: only once it is approved.
+    - actions: ["apply"]
+      effect: EFFECT_ALLOW
+      roles: ["ops", "admin", "agent_operator"]
+      condition:
+        match:
+          all:
+            of:
+              - expr: V.same_tenant
+              - expr: request.resource.attr.state in ["approved", "applied"]
+    - actions: ["apply"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: '!(request.resource.attr.state in ["approved", "applied"])'
+
+    # Confirming which targets the organisation treats as SOX-significant.
+    - actions: ["set_sox_scope"]
+      effect: EFFECT_ALLOW
+      roles: ["controller", "cfo_designate"]
+      condition:
+        match:
+          expr: V.same_tenant

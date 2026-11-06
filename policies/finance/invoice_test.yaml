@@ -16,6 +16,18 @@ principals:
     id: alex
     roles: ["admin"]
 
+  warehouse_wes:   # ERP-gateway WAREHOUSE role
+    id: wes
+    roles: ["warehouse", "employee"]
+  hr_hal:
+    id: hal
+    roles: ["hr", "employee"]
+  ops_otto:
+    id: otto
+    roles: ["ops", "employee"]
+  auditor_aud:     # external auditor — NOT staff
+    id: aud
+    roles: ["external_auditor"]
 resources:
   small_invoice:
     id: inv-001
@@ -83,3 +95,41 @@ tests:
           view: EFFECT_ALLOW
           approve: EFFECT_ALLOW
           delete: EFFECT_ALLOW
+
+  - name: Warehouse, HR and ops roles are denied finance
+    input:
+      principals: [warehouse_wes, hr_hal, ops_otto]
+      resources: [small_invoice, large_invoice]
+      actions: [view, create, approve]
+    expected:
+      - principal: warehouse_wes
+        resource: small_invoice
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, approve: EFFECT_DENY }
+      - principal: warehouse_wes
+        resource: large_invoice
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, approve: EFFECT_DENY }
+      - principal: hr_hal
+        resource: small_invoice
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, approve: EFFECT_DENY }
+      - principal: hr_hal
+        resource: large_invoice
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, approve: EFFECT_DENY }
+      - principal: ops_otto
+        resource: small_invoice
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, approve: EFFECT_DENY }
+      - principal: ops_otto
+        resource: large_invoice
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, approve: EFFECT_DENY }
+
+  - name: External auditor is denied every invoice action
+    input:
+      principals: [auditor_aud]
+      resources: [small_invoice, large_invoice]
+      actions: [view, create, approve]
+    expected:
+      - principal: auditor_aud
+        resource: small_invoice
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, approve: EFFECT_DENY }
+      - principal: auditor_aud
+        resource: large_invoice
+        actions: { view: EFFECT_DENY, create: EFFECT_DENY, approve: EFFECT_DENY }

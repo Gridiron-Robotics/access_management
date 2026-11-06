@@ -30,6 +30,48 @@ principals:
     attr:
       tenant_id: tenant-b
       tool_scopes: ["inventree", "bigcapital", "payments"]
+  ops_otto:                  # ERP-gateway OPS role, tenant A
+    id: otto
+    roles: ["ops", "employee"]
+    attr:
+      tenant_id: tenant-a
+      tool_scopes: ["inventree", "bigcapital"]
+  hr_hana:                   # ERP-gateway HR role, tenant A
+    id: hana
+    roles: ["hr", "employee"]
+    attr:
+      tenant_id: tenant-a
+      tool_scopes: ["inventree", "bigcapital"]
+  warehouse_wes:             # ERP-gateway WAREHOUSE role, tenant A
+    id: wes
+    roles: ["warehouse", "employee"]
+    attr:
+      tenant_id: tenant-a
+      tool_scopes: ["inventree", "bigcapital"]
+  auditor_aud:               # the audit firm: external, NOT staff, tenant A
+    id: aud
+    roles: ["external_auditor"]
+    attr:
+      tenant_id: tenant-a
+      tool_scopes: ["inventree", "bigcapital"]
+  auditor_with_staff:        # auditor account that also inherited staff/employee
+    id: aud-s
+    roles: ["external_auditor", "staff", "employee"]
+    attr:
+      tenant_id: tenant-a
+      tool_scopes: ["inventree", "bigcapital"]
+  auditor_with_admin:        # an admin who (wrongly) also holds the auditor role
+    id: aud-a
+    roles: ["admin", "external_auditor", "employee"]
+    attr:
+      tenant_id: tenant-a
+      tool_scopes: ["inventree", "bigcapital", "payments"]
+  auditor_other:             # an auditor engaged by a DIFFERENT tenant
+    id: aud-b
+    roles: ["external_auditor"]
+    attr:
+      tenant_id: tenant-b
+      tool_scopes: ["inventree", "bigcapital"]
 
 resources:
   read_tool:
@@ -69,6 +111,44 @@ resources:
       tool: disburse
       destructive: false
       approved: false
+  audit_history_read:        # on the EXTERNAL_AUDITOR allowlist
+    id: t-5
+    kind: "agent:mcp_tool"
+    attr:
+      tenant_id: tenant-a
+      server: bigcapital
+      tool: audit_prep.get_entity_audit_history
+      destructive: false
+      approved: false
+  audit_package_read:        # on the allowlist
+    id: t-6
+    kind: "agent:mcp_tool"
+    attr:
+      tenant_id: tenant-a
+      server: bigcapital
+      tool: audit_prep.get_audit_package
+      destructive: false
+      approved: false
+  audit_sample_write:        # an audit_prep WRITE: drawing a sample makes evidence
+    id: t-7
+    kind: "agent:mcp_tool"
+    attr:
+      tenant_id: tenant-a
+      server: bigcapital
+      tool: audit_prep.draw_sample
+      destructive: true
+      approved: true
+      approval_ref: appr-9002
+  audit_write_mislabelled:   # an allowlisted name that claims to be destructive
+    id: t-8
+    kind: "agent:mcp_tool"
+    attr:
+      tenant_id: tenant-a
+      server: bigcapital
+      tool: audit_prep.get_audit_package
+      destructive: true
+      approved: true
+      approval_ref: appr-9003
 
 tests:
   - name: Operator can dispatch a non-destructive tool in scope
@@ -159,3 +239,175 @@ tests:
       - principal: admin_ada
         resource: read_tool
         actions: { administer: EFFECT_ALLOW }
+
+  # -- ERP-gateway token roles: ops / hr / warehouse ----------------------
+
+  - name: Gateway roles dispatch a non-destructive in-scope tool and may list
+    input:
+      principals: [ops_otto, hr_hana, warehouse_wes]
+      resources: [read_tool]
+      actions: [dispatch, list, describe]
+    expected:
+      - principal: ops_otto
+        resource: read_tool
+        actions: { dispatch: EFFECT_ALLOW, list: EFFECT_ALLOW, describe: EFFECT_ALLOW }
+      - principal: hr_hana
+        resource: read_tool
+        actions: { dispatch: EFFECT_ALLOW, list: EFFECT_ALLOW, describe: EFFECT_ALLOW }
+      - principal: warehouse_wes
+        resource: read_tool
+        actions: { dispatch: EFFECT_ALLOW, list: EFFECT_ALLOW, describe: EFFECT_ALLOW }
+
+  - name: Gateway roles need a recorded approval for a destructive tool
+    input:
+      principals: [ops_otto, hr_hana, warehouse_wes]
+      resources: [destructive_unapproved, destructive_approved, out_of_scope_tool]
+      actions: [dispatch]
+    expected:
+      - principal: ops_otto
+        resource: destructive_unapproved
+        actions: { dispatch: EFFECT_DENY }
+      - principal: ops_otto
+        resource: destructive_approved
+        actions: { dispatch: EFFECT_ALLOW }
+      - principal: ops_otto
+        resource: out_of_scope_tool
+        actions: { dispatch: EFFECT_DENY }
+      - principal: hr_hana
+        resource: destructive_unapproved
+        actions: { dispatch: EFFECT_DENY }
+      - principal: hr_hana
+        resource: destructive_approved
+        actions: { dispatch: EFFECT_ALLOW }
+      - principal: hr_hana
+        resource: out_of_scope_tool
+        actions: { dispatch: EFFECT_DENY }
+      - principal: warehouse_wes
+        resource: destructive_unapproved
+        actions: { dispatch: EFFECT_DENY }
+      - principal: warehouse_wes
+        resource: destructive_approved
+        actions: { dispatch: EFFECT_ALLOW }
+      - principal: warehouse_wes
+        resource: out_of_scope_tool
+        actions: { dispatch: EFFECT_DENY }
+
+  - name: Ops cannot administer the gateway (admin-only)
+    input:
+      principals: [ops_otto, hr_hana, warehouse_wes]
+      resources: [read_tool]
+      actions: [administer]
+    expected:
+      - principal: ops_otto
+        resource: read_tool
+        actions: { administer: EFFECT_DENY }
+      - principal: hr_hana
+        resource: read_tool
+        actions: { administer: EFFECT_DENY }
+      - principal: warehouse_wes
+        resource: read_tool
+        actions: { administer: EFFECT_DENY }
+
+  # -- external_auditor: audit reads, nothing else ------------------------
+
+  - name: External auditor dispatches the allowlisted audit reads in its tenant
+    input:
+      principals: [auditor_aud]
+      resources: [audit_history_read, audit_package_read]
+      actions: [dispatch]
+    expected:
+      - principal: auditor_aud
+        resource: audit_history_read
+        actions: { dispatch: EFFECT_ALLOW }
+      - principal: auditor_aud
+        resource: audit_package_read
+        actions: { dispatch: EFFECT_ALLOW }
+
+  - name: External auditor is denied every write, approved or not, and every other tool
+    input:
+      principals: [auditor_aud]
+      resources: [audit_sample_write, audit_write_mislabelled, destructive_approved,
+                  destructive_unapproved, read_tool, out_of_scope_tool]
+      actions: [dispatch, administer, list, describe]
+    expected:
+      - principal: auditor_aud
+        resource: audit_sample_write
+        actions: { dispatch: EFFECT_DENY, administer: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY }
+      - principal: auditor_aud
+        resource: audit_write_mislabelled
+        actions: { dispatch: EFFECT_DENY, administer: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY }
+      - principal: auditor_aud
+        resource: destructive_approved
+        actions: { dispatch: EFFECT_DENY, administer: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY }
+      - principal: auditor_aud
+        resource: destructive_unapproved
+        actions: { dispatch: EFFECT_DENY, administer: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY }
+      - principal: auditor_aud
+        resource: read_tool
+        actions: { dispatch: EFFECT_DENY, administer: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY }
+      - principal: auditor_aud
+        resource: out_of_scope_tool
+        actions: { dispatch: EFFECT_DENY, administer: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY }
+
+  - name: External auditor of another tenant cannot read this tenant's audit evidence
+    input:
+      principals: [auditor_other]
+      resources: [audit_history_read, audit_package_read]
+      actions: [dispatch]
+    expected:
+      - principal: auditor_other
+        resource: audit_history_read
+        actions: { dispatch: EFFECT_DENY }
+      - principal: auditor_other
+        resource: audit_package_read
+        actions: { dispatch: EFFECT_DENY }
+
+  - name: The same approved audit write is open to staff gateway roles — only the auditor is barred
+    input:
+      principals: [hr_hana, warehouse_wes]
+      resources: [audit_sample_write]
+      actions: [dispatch]
+    expected:
+      - principal: hr_hana
+        resource: audit_sample_write
+        actions: { dispatch: EFFECT_ALLOW }
+      - principal: warehouse_wes
+        resource: audit_sample_write
+        actions: { dispatch: EFFECT_ALLOW }
+
+  - name: Holding external_auditor confines a principal to the audit reads, even with staff or admin
+    input:
+      principals: [auditor_with_staff, auditor_with_admin]
+      resources: [audit_history_read, read_tool, destructive_approved, audit_sample_write, audit_write_mislabelled]
+      actions: [dispatch, list, describe, administer]
+    expected:
+      - principal: auditor_with_staff
+        resource: audit_history_read
+        actions: { dispatch: EFFECT_ALLOW, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_staff
+        resource: read_tool
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_staff
+        resource: destructive_approved
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_staff
+        resource: audit_sample_write
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_staff
+        resource: audit_write_mislabelled
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_admin
+        resource: audit_history_read
+        actions: { dispatch: EFFECT_ALLOW, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_admin
+        resource: read_tool
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_admin
+        resource: destructive_approved
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_admin
+        resource: audit_sample_write
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }
+      - principal: auditor_with_admin
+        resource: audit_write_mislabelled
+        actions: { dispatch: EFFECT_DENY, list: EFFECT_DENY, describe: EFFECT_DENY, administer: EFFECT_DENY }

@@ -5,6 +5,14 @@
 #
 # Keep this in sync with policies/**: every role key here must exist in a policy,
 # and every assignable role in a policy should appear here. (See ROLES.md.)
+# integration/tests/test_role_catalog.py enforces the first half and that
+# cerbos_access/catalog.py mirrors this file.
+#
+# `keycloak_realm_role: true` marks a role that must also reach the user's
+# Keycloak token (realm `erp`) as a realm role of the same name. Assigning it
+# on the access page is what grants it: the sync in cerbos_access/keycloak_sync.py
+# adds/removes exactly these realm roles and never touches any other realm role
+# a user holds. `external: true` marks a role for people outside the company.
 version: 1
 
 # Granted to all staff by default; enables ownership-based access (the `owner`
@@ -13,6 +21,15 @@ baseline_roles:
   - key: employee
     label: Employee (baseline)
     description: Default for all staff; enables "can act on my own records".
+  - key: staff
+    label: Staff (Keycloak default — not assigned here)
+    assignable: false
+    description: >-
+      Every user in Keycloak realm erp holds the `staff` realm role through the
+      realm's default role (and the staff/admins groups); the ERP gateway reads
+      it as STAFF. Listed so the policies' `staff`/`STAFF` rules are in the
+      contract. The page shows it but cannot grant or revoke it, and the
+      Keycloak sync never touches it.
 
 # Full access to everything. Show this clearly separated and grant sparingly.
 global_roles:
@@ -40,6 +57,13 @@ modules:
       - key: warehouse_manager
         label: Warehouse Manager
         description: Also transfer and delete items anywhere.
+      - key: warehouse
+        label: Warehouse (ERP gateway)
+        keycloak_realm_role: true
+        description: >-
+          Stock reads and adjustments in their own location; view tenant orders
+          and shipments; ERP gateway tools scoped to WAREHOUSE (destructive ones
+          only with a recorded human approval). No finance access.
 
   - key: hr
     label: HR / People
@@ -50,6 +74,13 @@ modules:
       - key: hr_manager
         label: HR Manager
         description: Also terminate employee records.
+      - key: hr
+        label: HR (ERP gateway)
+        keycloak_realm_role: true
+        description: >-
+          View and edit employee records (not terminate); ERP gateway tools
+          scoped to HR (destructive ones only with a recorded human approval).
+          No inventory or finance access.
 
   - key: sales
     label: Sales / CRM
@@ -146,6 +177,73 @@ modules:
       - key: agent_supervisor
         label: Agent Supervisor
         description: Dispatch destructive MCP tools, but only with a recorded human approval.
+
+  - key: operations
+    label: Operations
+    roles:
+      - key: ops
+        label: Operations (ERP gateway)
+        keycloak_realm_role: true
+        description: >-
+          View/create purchase orders (not approve) and view stock; ERP gateway
+          tools scoped to OPS — purchasing, receiving, placement release,
+          deduction holds, model governance (destructive ones only with a
+          recorded human approval). Cannot administer the gateway.
+
+  - key: model_governance
+    label: AI Model Change Control (ITGC)
+    description: >-
+      Who may approve a change to the AI model that serves an agent. Assign each
+      role to NAMED people: the ERP middleware routes every model change to these
+      roles and refuses the requester and any administrator as an approver, so a
+      chain whose role nobody holds stays unapproved. Hold them apart — one person
+      holding two of them still cannot sign two steps of one change.
+    roles:
+      - key: ml_lead
+        label: ML Lead
+        keycloak_realm_role: true
+        description: >-
+          First approver of every model change (tenant adapter alone; domain and
+          material changes with the roles below). May file changes and emergency
+          rollbacks; never approves a change they filed.
+      - key: controller
+        label: Controller
+        keycloak_realm_role: true
+        description: >-
+          Second approver of a domain-wide or material model change; confirms which
+          agents the organisation treats as SOX-significant. Also the CONTROLLER
+          step of large revenue contracts in the ERP.
+      - key: cfo_designate
+        label: CFO Designate
+        keycloak_realm_role: true
+        description: >-
+          Third approver of a material model change — a base-model swap, a global
+          change, or a change to a SOX-significant agent; may confirm the
+          SOX-significant list.
+      - key: oncall_lead
+        label: On-call Lead
+        keycloak_realm_role: true
+        description: >-
+          Approves an emergency model rollback (one-hour SLA) and may file one.
+          A rollback still needs this approval; it is never automatic.
+
+  - key: external
+    label: External parties — NOT staff
+    description: >-
+      For people OUTSIDE the company (e.g. the audit firm). These roles grant
+      no staff access at all: do not combine them with staff roles, and do not
+      assign them to employees. An employee assigned only an external role is
+      not given the `employee` baseline either.
+    roles:
+      - key: external_auditor
+        label: External Auditor (read-only, NOT staff)
+        keycloak_realm_role: true
+        external: true
+        description: >-
+          Read-only audit evidence through the ERP gateway — the five audit_prep
+          read tools (entity change history, audit-chain check, PBC request
+          list, tie-out run, audit package) in their own tenant. Cannot change
+          anything anywhere.
 
 
 # Attributes the HRMS/ERP must supply per user (NOT toggled on the page; read at
