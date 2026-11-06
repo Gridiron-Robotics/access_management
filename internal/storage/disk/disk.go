@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"iter"
 	"path/filepath"
 	"time"
 
@@ -125,8 +126,8 @@ func (s *Store) GetAll(ctx context.Context) ([]*policy.CompilationUnit, error) {
 	return s.idx.GetAll(ctx)
 }
 
-func (s *Store) GetAllStreaming(ctx context.Context, fn func(*policy.CompilationUnit) error) error {
-	return index.StreamAll(ctx, s.idx, fn)
+func (s *Store) Iter(ctx context.Context) iter.Seq2[*policy.CompilationUnit, error] {
+	return s.idx.Iter(ctx)
 }
 
 func (s *Store) GetAllMatching(_ context.Context, modIDs []namer.ModuleID) ([]*policy.CompilationUnit, error) {
@@ -170,7 +171,10 @@ func (s *Store) Reload(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to reload the index: %w", err)
 	}
-	s.subs.NotifySubscribers(evts...)
+
+	if err := s.subs.NotifySubscribersAndWait(ctx, evts...); err != nil {
+		return fmt.Errorf("failed to wait for subscribers to process the reload: %w", err)
+	}
 
 	metrics.Record(ctx, metrics.StoreLastSuccessfulRefresh(), time.Now().UnixMilli(), metrics.DriverKey(DriverName))
 	return nil
