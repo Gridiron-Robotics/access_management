@@ -31,6 +31,7 @@ jobs:
           # ever held, to refuse a floor edited downwards. A depth-1 clone can
           # only see the value in HEAD, which is the lowered one.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install the tools the gate needs
         shell: bash
